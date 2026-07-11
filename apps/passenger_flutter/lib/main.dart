@@ -21,7 +21,7 @@ class PassengerApp extends StatelessWidget {
         builder: (context, _) => MaterialApp(
           debugShowCheckedModeBanner: false,
           title: 'ASTRIDE',
-          theme: AstrideTheme.light(),
+          theme: buildAstrideTheme(),
           home: PassengerRoot(controller: controller),
         ),
       );
