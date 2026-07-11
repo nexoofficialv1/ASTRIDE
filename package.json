@@ -1,0 +1,24 @@
+{
+  "name": "astride-master-platform",
+  "version": "3.11.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "install:api": "npm --prefix services/api ci --no-audit --no-fund",
+    "test:api": "npm --prefix services/api test",
+    "test:master": "node tests/master-readiness.mjs",
+    "test": "npm run test:business-v30 && npm run test:sprint2 && npm run test:sprint3 && npm run test:sprint4 && npm run test:sprint5 && npm run test:sprint6 && npm run test:master && npm run test:compile-gate && npm run test:api",
+    "test:compile-gate": "node tests/mobile-compile-gate.mjs",
+    "test:business-v30": "node tests/business-rules-v30.mjs",
+    "test:sprint2": "node tests/business-api-sprint2.mjs",
+    "test:sprint3": "node tests/partner-api-sprint3.mjs && node tests/mobile-v30-partner.mjs",
+    "test:sprint4": "node tests/mobile-v31-passenger-ui.mjs",
+    "test:sprint5": "node tests/mobile-v32-driver-ui.mjs",
+    "test:sprint6": "node tests/mobile-v33-partner-ui.mjs",
+    "test:sprint9": "node tests/sprint9-integrations.mjs",
+    "test:sprint10": "node tests/sprint10-production-readiness.mjs",
+    "test:sprint10b": "node tests/sprint10b-release-pipeline.mjs",
+    "test:sprint10c": "node tests/sprint10c-field-test.mjs",
+    "test:campaigns": "node tests/offer-campaign-v311.mjs"
+  }
+}

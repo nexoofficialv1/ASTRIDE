@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const read=(p)=>fs.readFileSync(new URL(`../${p}`,import.meta.url),'utf8');
+const vault=read('services/api/src/config/provider-vault.mjs');
+assert.match(vault,/persistVault/);assert.match(vault,/getPublicProviderClientConfig/);assert.doesNotMatch(vault,/const secrets = new Map\(\);\nconst key/);
+const runtime=read('services/api/src/config/runtime-config.mjs');assert.match(runtime,/persistRuntimeConfig/);assert.match(runtime,/serviceEnabled: false/);assert.match(runtime,/active: 'osm'/);
+const admin=read('apps/admin_control_console/app.js');assert.match(admin,/saveCredential/);assert.match(admin,/Credential JSON/);assert.match(admin,/vault-status/);
+const flow=read('.github/workflows/android-release.yml');assert.match(flow,/partner_flutter/);assert.match(flow,/FIREBASE_REQUIRED: 'false'/);
+const validate=read('mobile_build/scripts/validate_android_release_secrets.sh');assert.match(validate,/partner_flutter/);assert.doesNotMatch(validate,/required=.*GOOGLE_MAPS_ANDROID_KEY/);
+const server=read('services/api/src/server.mjs');assert.match(server,/\/v1\/public\/mobile-config/);
+console.log('v3.9.3 VPS bootstrap architecture checks passed');

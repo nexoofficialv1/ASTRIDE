@@ -1,0 +1,7 @@
+[Unit]
+Description=Local Ride PostgreSQL backup
+After=docker.service
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/localride
+ExecStart=/opt/localride/deploy/scripts/backup.sh

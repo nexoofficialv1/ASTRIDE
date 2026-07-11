@@ -1,0 +1,10 @@
+import fs from 'node:fs';import path from 'node:path';import assert from 'node:assert/strict';
+const root=path.resolve(import.meta.dirname,'..');const base=path.join(root,'apps/admin_control_console');
+for(const f of ['index.html','style.css','app.js','README.md'])assert.ok(fs.existsSync(path.join(base,f)),`${f} missing`);
+const html=fs.readFileSync(path.join(base,'index.html'),'utf8');const js=fs.readFileSync(path.join(base,'app.js'),'utf8');const css=fs.readFileSync(path.join(base,'style.css'),'utf8');
+for(const page of ['dashboard','rides','drivers','payments','settlements','safety','complaints','notifications','providers','settings','audit'])assert.ok(js.includes(`'${page}'`)||js.includes(`${page}:`),`page ${page} missing`);
+for(const endpoint of ['/v1/admin/dashboard','/v1/admin/rides','/v1/admin/drivers','/v1/admin/payments','/v1/admin/sos','/v1/admin/providers/credentials','/v1/admin/audit','/v1/admin/storage/status'])assert.ok(js.includes(endpoint),`endpoint ${endpoint} missing`);
+assert.ok(js.includes('English')||html.includes('English'));assert.ok(js.includes('বাংলা')||html.includes('বাংলা'));assert.ok(js.includes('हिंदी')||html.includes('हिंदी'));
+assert.ok(html.includes('Secure internal administration'));assert.ok(!html.toLowerCase().includes('book a ride'));
+assert.ok(css.includes('@media'));assert.ok(js.includes('authorization:`Bearer ${state.token}`'));
+console.log('v1.8 admin console structure test passed');

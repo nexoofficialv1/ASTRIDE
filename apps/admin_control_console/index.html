@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>ASTRIDE Admin Control</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<div id="toast" class="toast" hidden></div>
+<section id="login" class="login-shell"><form id="loginForm" class="login-card"><div class="logo">A</div><h1 data-i18n="controlCenter">Operations Control Center</h1><p data-i18n="internalOnly">Secure internal administration only</p><label><span data-i18n="apiBase">API base URL</span><input id="apiBase" autocomplete="url"></label><label><span data-i18n="username">Username</span><input id="username" value="admin" autocomplete="username"></label><label><span data-i18n="password">Password</span><input id="password" type="password" autocomplete="current-password"></label><button class="primary" type="submit" data-i18n="signIn">Sign in</button><small data-i18n="productionWarning">Use production credentials. Demo passwords are not accepted in production mode.</small></form></section>
+<div id="app" class="app-shell" hidden>
+<aside class="sidebar"><div class="brand"><div class="brand-mark">A</div><div><strong>ASTRIDE</strong><small>Business Control Console</small></div></div><nav id="nav"></nav><div class="sidebar-footer"><button id="refreshAll" class="ghost">↻ <span data-i18n="refresh">Refresh</span></button><button id="logout" class="ghost danger">⇥ <span data-i18n="logout">Logout</span></button></div></aside>
+<main><header class="topbar"><div><div class="eyebrow" data-i18n="internalMonitoring">Internal monitoring</div><h1 id="title">Dashboard</h1></div><div class="top-actions"><span id="connectionBadge" class="badge neutral">API</span><select id="language"><option value="en">English</option><option value="bn">বাংলা</option><option value="hi">हिंदी</option></select></div></header><section id="content" aria-live="polite"></section></main>
+</div>
+<script src="app.js"></script></body></html>

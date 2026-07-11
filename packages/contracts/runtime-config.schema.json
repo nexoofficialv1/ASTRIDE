@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Mobile Runtime Configuration",
+  "type": "object",
+  "required": ["version", "maintenanceMode", "minimumAppVersion", "features", "providers"],
+  "properties": {
+    "version": {"type": "integer", "minimum": 1},
+    "maintenanceMode": {"type": "boolean"},
+    "minimumAppVersion": {"type": "string"},
+    "features": {"type": "object", "additionalProperties": {"type": "boolean"}},
+    "providers": {
+      "type": "object",
+      "properties": {
+        "maps": {"type": "string"},
+        "payments": {"type": "string"}
+      }
+    }
+  }
+}

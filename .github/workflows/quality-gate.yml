@@ -1,0 +1,24 @@
+name: Mobile Quality Gate
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [passenger_flutter, driver_flutter, partner_flutter]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: mobile_build/scripts/bootstrap_mobile.sh ${{ matrix.app }}
+      - working-directory: apps/${{ matrix.app }}
+        run: flutter analyze
+      - working-directory: apps/${{ matrix.app }}
+        run: flutter test
+      - run: node tests/locale-parity.mjs
+      - run: node tests/mobile-v23-build-pipeline.mjs

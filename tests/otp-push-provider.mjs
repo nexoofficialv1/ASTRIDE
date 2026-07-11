@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import { getOtpAdapter } from '../services/api/src/providers/otp/index.mjs';
+import { getNotificationAdapter } from '../services/api/src/providers/notifications/index.mjs';
+import { putProviderCredential,listCredentialStatus,getProviderCredential } from '../services/api/src/config/provider-vault.mjs';
+import { registerDevice,listDevices,deactivateDevice } from '../services/api/src/store/device-store.mjs';
+const otp=await getOtpAdapter('mock').send('919876543210','123456','test');assert.equal(otp.accepted,true);assert.equal(otp.mobileMasked,'91******10');
+const push=await getNotificationAdapter('mock').send({id:'1',type:'TEST'},'test');assert.equal(push.accepted,true);
+putProviderCredential('otp','msg91','test',{authKey:'secret',templateId:'t1'});assert.equal(getProviderCredential('otp','msg91','test').authKey,'secret');assert.equal(listCredentialStatus()[0].configured,true);assert.equal(JSON.stringify(listCredentialStatus()).includes('secret'),false);
+registerDevice({actorType:'passenger',actorId:'p1',deviceId:'d1',platform:'android',pushToken:'tok'});assert.equal(listDevices('passenger','p1').length,1);deactivateDevice('passenger','p1','d1');assert.equal(listDevices('passenger','p1').length,0);
+console.log('v1.6 OTP/push/provider configuration test passed');

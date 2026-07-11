@@ -1,0 +1,12 @@
+import { readFile, access } from 'node:fs/promises';
+import path from 'node:path';
+const root=path.resolve(import.meta.dirname,'..');
+const required=['docker-compose.production.yml','.env.production.example','services/api/Dockerfile','deploy/caddy/Caddyfile','deploy/scripts/preflight.sh','deploy/scripts/deploy.sh','deploy/scripts/healthcheck.sh','deploy/scripts/backup.sh','deploy/scripts/restore.sh','deploy/systemd/localride-backup.timer','docs/PRODUCTION_DEPLOYMENT.md'];
+for(const f of required) await access(path.join(root,f));
+const compose=await readFile(path.join(root,'docker-compose.production.yml'),'utf8');
+for(const s of ['postgres:','redis:','api:','caddy:','condition: service_healthy','read_only: true','postgres_password']) if(!compose.includes(s)) throw new Error(`Missing ${s}`);
+const caddy=await readFile(path.join(root,'deploy/caddy/Caddyfile'),'utf8');
+for(const s of ['reverse_proxy api:3333','Strict-Transport-Security','Content-Security-Policy']) if(!caddy.includes(s)) throw new Error(`Missing ${s}`);
+const env=await readFile(path.join(root,'.env.production.example'),'utf8');
+for(const s of ['API_DOMAIN=','ADMIN_DOMAIN=','REDIS_URL=','PROVIDER_CREDENTIAL_KEY=']) if(!env.includes(s)) throw new Error(`Missing ${s}`);
+console.log('v1.9 deployment structure test passed');

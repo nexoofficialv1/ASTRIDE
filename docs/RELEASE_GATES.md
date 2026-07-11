@@ -1,0 +1,11 @@
+# Release Gates
+- 100% locale key parity across en/bn/hi.
+- No hard-coded user-facing strings.
+- Current-location map startup and My Location button verified on Android and iOS.
+- Autocomplete and local landmarks verified.
+- Back navigation never restarts the app.
+- Raw server errors are never rendered to users.
+- Booking state transitions and payment verification are server controlled.
+- Driver cannot go online without approval, GPS and notifications.
+- Background tracking reconnect and weak-network tests pass.
+- OTP, SOS, audit log, permission and privacy tests pass.

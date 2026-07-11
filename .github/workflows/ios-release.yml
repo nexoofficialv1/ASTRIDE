@@ -1,0 +1,41 @@
+name: iOS Release
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        type: choice
+        options: [passenger_flutter, driver_flutter]
+        required: true
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: mobile_build/scripts/bootstrap_mobile.sh
+      - name: Install Apple certificate
+        env:
+          CERTIFICATE_P12: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+        run: |
+          echo "$CERTIFICATE_P12" | base64 --decode > /tmp/certificate.p12
+          security create-keychain -p actions build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p actions build.keychain
+          security import /tmp/certificate.p12 -k build.keychain -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k actions build.keychain
+      - name: Install provisioning profile
+        env:
+          PROFILE_B64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$PROFILE_B64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/astride.mobileprovision
+      - run: mobile_build/scripts/build_ios.sh ${{ inputs.app }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.app }}-ios-release
+          path: apps/${{ inputs.app }}/build/ios/ipa/*.ipa
+          if-no-files-found: error

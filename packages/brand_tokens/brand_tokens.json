@@ -1,0 +1,29 @@
+{
+  "brandName": "ASTRIDE",
+  "company": "Astra Technologies",
+  "tagline": "Ride Smarter. Reach Faster.",
+  "colors": {
+    "navy": "#0D1B3D",
+    "green": "#22C55E",
+    "orange": "#FF8A00",
+    "background": "#F5F7FA",
+    "text": "#1F2937",
+    "white": "#FFFFFF"
+  },
+  "typography": {
+    "family": "Poppins",
+    "logoWeight": 800,
+    "headingWeight": 600,
+    "bodyWeight": 400
+  },
+  "radius": {
+    "small": 12,
+    "medium": 18,
+    "large": 28
+  },
+  "motion": {
+    "fastMs": 160,
+    "normalMs": 260,
+    "slowMs": 420
+  }
+}

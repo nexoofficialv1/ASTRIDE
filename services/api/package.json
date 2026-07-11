@@ -1,0 +1,35 @@
+{
+  "name": "local-ride-api",
+  "version": "3.11.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "migrate": "node scripts/migrate.mjs",
+    "hash:admin": "node scripts/hash-admin-password.mjs",
+    "test": "npm run test:all",
+    "test:all": "node ../../tests/locale-parity.mjs && node ../../tests/api-smoke.mjs && node ../../tests/driver-smoke.mjs && node ../../tests/tracking-smoke.mjs && node ../../tests/payment-smoke.mjs && node ../../tests/admin-smoke.mjs && node ../../tests/safety-smoke.mjs && node ../../tests/release-candidate.mjs && node ../../tests/production-foundation.mjs && node ../../tests/repository-persistence.mjs && node ../../tests/realtime-data-layer.mjs && npm run test:providers && npm run test:mobile && npm run test:payments-v17 && npm run test:admin-v18 && npm run test:deployment-v19",
+    "test:realtime": "node ../../tests/realtime-data-layer.mjs",
+    "test:mobile": "node ../../tests/mobile-v14-structure.mjs && node ../../tests/mobile-v15-native.mjs && node ../../tests/mobile-v16-notifications.mjs",
+    "test:providers": "node ../../tests/otp-push-provider.mjs",
+    "test:payments-v17": "node ../../tests/payment-provider-v17.mjs",
+    "test:admin-v18": "node ../../tests/admin-console-v18.mjs",
+    "test:deployment-v19": "node ../../tests/deployment-v19.mjs",
+    "test:sprint2": "node ../../tests/business-api-sprint2.mjs",
+    "test:sprint3": "node ../../tests/partner-api-sprint3.mjs && node ../../tests/mobile-v30-partner.mjs",
+    "test:sprint7": "node ../../tests/admin-business-modules-sprint7.mjs",
+    "test:sprint8": "node ../../tests/map-zone-sprint8.mjs",
+    "test:sprint9": "node ../../tests/sprint9-integrations.mjs",
+    "test:sprint10": "node ../../tests/sprint10-production-readiness.mjs",
+    "test:sprint10c": "node ../../tests/sprint10c-field-test.mjs",
+    "test:campaigns": "node ../../tests/offer-campaign-v311.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.13.1",
+    "redis": "^4.7.0",
+    "ws": "^8.18.0"
+  }
+}

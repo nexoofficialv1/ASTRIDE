@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const runner=fs.readFileSync('tools/field-test/staging-e2e.mjs','utf8');
+const workflow=fs.readFileSync('.github/workflows/staging-field-test.yml','utf8');
+const docs=fs.readFileSync('docs/SPRINT10C_FIELD_TEST.md','utf8');
+assert.match(runner,/ALLOW_MUTATING_FIELD_TEST/);
+assert.match(runner,/ALLOW_PRODUCTION_FIELD_TEST/);
+assert.match(runner,/ALLOW_NON_READY_FIELD_TEST/);
+assert.match(runner,/tracking_readback/);
+assert.match(runner,/payment_capture.*MANUAL/s);
+assert.match(workflow,/environment: staging-field-test/);
+assert.match(workflow,/Non-mutating staging preflight/);
+assert.match(docs,/Physical-device checklist/);
+console.log('Sprint 10C field-test assets passed');

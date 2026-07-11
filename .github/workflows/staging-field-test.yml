@@ -1,0 +1,53 @@
+name: ASTRIDE Staging Field Test
+on:
+  workflow_dispatch:
+    inputs:
+      payment_mode:
+        description: Payment path to validate
+        type: choice
+        options: [cash, online]
+        default: cash
+        required: true
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Non-mutating staging preflight
+        env:
+          ASTRIDE_BASE_URL: ${{ vars.STAGING_API_BASE_URL }}
+        run: node tools/field-test/preflight.mjs | tee staging-preflight.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: astride-staging-preflight
+          path: staging-preflight.json
+  e2e:
+    needs: preflight
+    runs-on: ubuntu-latest
+    environment: staging-field-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Approved end-to-end staging run
+        env:
+          ASTRIDE_BASE_URL: ${{ vars.STAGING_API_BASE_URL }}
+          FIELD_TEST_MOBILE: ${{ secrets.FIELD_TEST_MOBILE }}
+          FIELD_TEST_OTP_CODE: ${{ secrets.FIELD_TEST_OTP_CODE }}
+          FIELD_TEST_PAYMENT_MODE: ${{ inputs.payment_mode }}
+          ALLOW_MUTATING_FIELD_TEST: 'true'
+          FIELD_TEST_OUTPUT_DIR: field-test-results
+        run: node tools/field-test/staging-e2e.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: astride-staging-field-test-${{ inputs.payment_mode }}
+          path: field-test-results/*.json
+          if-no-files-found: error
+          retention-days: 30

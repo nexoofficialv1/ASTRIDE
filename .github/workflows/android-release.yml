@@ -1,0 +1,127 @@
+name: ASTRIDE Android Signed Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: App to release
+        type: choice
+        options: [passenger_flutter, driver_flutter, partner_flutter]
+        required: true
+      environment:
+        description: Runtime environment
+        type: choice
+        options: [staging, production]
+        default: production
+        required: true
+      version:
+        description: Semantic version, for example 3.8.0
+        required: true
+        default: 3.11.0
+      build_number:
+        description: Increasing Android version code
+        required: true
+        default: '311'
+      publish_github_release:
+        description: Publish files under a GitHub Release
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release-${{ inputs.app }}-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate version and release inputs
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          GOOGLE_MAPS_ANDROID_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_KEY }}
+          PASSENGER_FIREBASE_ANDROID_BASE64: ${{ secrets.PASSENGER_FIREBASE_ANDROID_BASE64 }}
+          DRIVER_FIREBASE_ANDROID_BASE64: ${{ secrets.DRIVER_FIREBASE_ANDROID_BASE64 }}
+          PARTNER_FIREBASE_ANDROID_BASE64: ${{ secrets.PARTNER_FIREBASE_ANDROID_BASE64 }}
+          PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL }}
+          PRODUCTION_WS_BASE_URL: ${{ vars.PRODUCTION_WS_BASE_URL }}
+          STAGING_API_BASE_URL: ${{ vars.STAGING_API_BASE_URL }}
+          STAGING_WS_BASE_URL: ${{ vars.STAGING_WS_BASE_URL }}
+        run: |
+          [[ "${{ inputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]
+          [[ "${{ inputs.build_number }}" =~ ^[1-9][0-9]*$ ]]
+          mobile_build/scripts/validate_android_release_secrets.sh "${{ inputs.app }}" "${{ inputs.environment }}"
+
+  build:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Bootstrap selected mobile app
+        run: mobile_build/scripts/bootstrap_mobile.sh "${{ inputs.app }}"
+      - name: Render validated runtime environment
+        env:
+          PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL }}
+          PRODUCTION_WS_BASE_URL: ${{ vars.PRODUCTION_WS_BASE_URL }}
+          STAGING_API_BASE_URL: ${{ vars.STAGING_API_BASE_URL }}
+          STAGING_WS_BASE_URL: ${{ vars.STAGING_WS_BASE_URL }}
+        run: mobile_build/scripts/render_mobile_env.sh "${{ inputs.environment }}"
+      - name: Inject Firebase configuration
+        env:
+          FIREBASE_ANDROID_CONFIG_BASE64: ${{ inputs.app == 'passenger_flutter' && secrets.PASSENGER_FIREBASE_ANDROID_BASE64 || (inputs.app == 'driver_flutter' && secrets.DRIVER_FIREBASE_ANDROID_BASE64 || secrets.PARTNER_FIREBASE_ANDROID_BASE64) }}
+          FIREBASE_REQUIRED: 'false'
+        run: mobile_build/scripts/inject_firebase.sh "${{ inputs.app }}"
+      - name: Restore Android signing keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/astride-upload.jks"
+          cat > "apps/${{ inputs.app }}/android/key.properties" <<PROP
+          storePassword=$STORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=$RUNNER_TEMP/astride-upload.jks
+          PROP
+      - name: Build signed AAB and split APKs
+        env:
+          GOOGLE_MAPS_ANDROID_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_KEY }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_BUILD_NUMBER: ${{ inputs.build_number }}
+        run: mobile_build/scripts/build_android.sh "${{ inputs.app }}" release "${{ inputs.environment }}"
+      - name: Package and checksum artifacts
+        env:
+          RELEASE_BUILD_NUMBER: ${{ inputs.build_number }}
+        run: mobile_build/scripts/package_android_artifacts.sh "${{ inputs.app }}" "${{ inputs.version }}" "${{ inputs.environment }}" "$RUNNER_TEMP/release"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ASTRIDE-${{ inputs.app }}-${{ inputs.version }}-${{ inputs.environment }}
+          path: ${{ runner.temp }}/release/*
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish GitHub Release
+        if: ${{ inputs.publish_github_release }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-${{ inputs.app }}-v${{ inputs.version }}-${{ inputs.environment }}
+          name: ASTRIDE ${{ inputs.app }} v${{ inputs.version }} (${{ inputs.environment }})
+          prerelease: ${{ inputs.environment != 'production' }}
+          files: ${{ runner.temp }}/release/*
+          generate_release_notes: true

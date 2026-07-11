@@ -1,0 +1,3 @@
+export const REQUIRED_DOCUMENTS=['IDENTITY','PROFILE_PHOTO','VEHICLE_PHOTO','VEHICLE_REGISTRATION'];
+export function onboardingReadiness(driver,docs){const present=new Set(docs.filter(d=>d.status!=='REJECTED').map(d=>d.type));const missing=REQUIRED_DOCUMENTS.filter(x=>!present.has(x));return {ready:missing.length===0&&Boolean(driver.fullName)&&Boolean(driver.vehicle?.number),missing};}
+export function calculateDriverEarning({fareAmount,commissionPercent}){const grossPaise=Math.round(fareAmount*100);const commissionPaise=Math.round(grossPaise*commissionPercent/100);return {grossPaise,commissionPaise,netPaise:grossPaise-commissionPaise};}

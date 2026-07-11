@@ -1,0 +1,4 @@
+import fs from 'node:fs/promises';import path from 'node:path';import {fileURLToPath} from 'node:url';import {getPool,closePool} from '../src/db/postgres.mjs';
+if(!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
+const dir=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../migrations');const files=(await fs.readdir(dir)).filter(x=>x.endsWith('.sql')).sort();const pool=await getPool();
+try{for(const file of files){const version=file.replace(/\.sql$/,'');const exists=await pool.query('select 1 from schema_migrations where version=$1',[version]).catch(()=>({rowCount:0}));if(exists.rowCount){console.log('skip',version);continue;}const sql=await fs.readFile(path.join(dir,file),'utf8');await pool.query(sql);console.log('applied',version);}}finally{await closePool();}

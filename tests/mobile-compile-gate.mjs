@@ -1,0 +1,15 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const read = (p) => fs.readFileSync(p, 'utf8');
+const bootstrap = read('mobile_build/scripts/bootstrap_mobile.sh');
+assert.match(bootstrap, /patch_native\.py/);
+assert.doesNotMatch(bootstrap, /cp .*AndroidManifest\.xml/);
+const quality = read('.github/workflows/quality-gate.yml');
+assert.match(quality, /bootstrap_mobile\.sh \$\{\{ matrix\.app \}\}/);
+const compile = read('.github/workflows/android-compile-check.yml');
+assert.match(compile, /flutter build apk --debug/);
+assert.match(compile, /passenger_flutter, driver_flutter, partner_flutter/);
+const patcher = read('mobile_build/scripts/patch_native.py');
+assert.match(patcher, /Generated AndroidManifest\.xml/);
+assert.match(patcher, /ACCESS_BACKGROUND_LOCATION/);
+console.log('ASTRIDE Android compile gate contract passed');

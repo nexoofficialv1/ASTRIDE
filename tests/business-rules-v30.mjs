@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {calculateFareQuote,calculateCommissionSplit,serviceAvailability,driverMatchesPayment,evaluateLateArrival} from '../services/api/src/domain/astride-business-rules.mjs';
+const rules={currency:'INR',maximumTotoDistanceKm:29,waiting:{freeMinutes:3,perMinute:2,maxCharge:20},outsideArea:{stepKm:2,stepFare:25,returnCompensationPercent:50},dynamicPricing:{maxMultiplier:1.25},rideTypes:{FULL_TOTO:{minimumFare:50,includedKm:4,additionalStepKm:2,additionalStepFare:20,companyCommissionPercent:10,companyCommissionMaximum:5,promoterShareOfCompanyCommissionPercent:30,areaPromoterShareOfCompanyCommissionPercent:15,nightSurchargePercent:15},SHARE_TOTO:{minimumFare:10,includedKm:4,additionalStepKm:2,additionalStepFare:5,companyCommissionPercent:10,companyCommissionMaximum:2,promoterShareOfCompanyCommissionPercent:25,areaPromoterShareOfCompanyCommissionPercent:10,nightSurchargePercent:0},MOTORCYCLE:{minimumFare:25,includedKm:4,additionalStepKm:2,additionalStepFare:10,companyCommissionPercent:12,companyCommissionMaximum:4,promoterShareOfCompanyCommissionPercent:25,areaPromoterShareOfCompanyCommissionPercent:10,nightSurchargePercent:10}}};
+assert.equal(calculateFareQuote({rideType:'FULL_TOTO',distanceKm:6},rules).total,70);
+assert.equal(calculateFareQuote({rideType:'SHARE_TOTO',distanceKm:8},rules).total,20);
+assert.equal(serviceAvailability({rideType:'SHARE_TOTO',isOutsideArea:true,isNight:false}).available,false);
+assert.equal(serviceAvailability({rideType:'MOTORCYCLE',isOutsideArea:false,isNight:true,motorcycleAvailable:false}).available,false);
+assert.equal(driverMatchesPayment({acceptsCash:true,acceptsUpi:false},'CASH'),true);
+assert.deepEqual(calculateCommissionSplit({fareAmount:90,rideType:'FULL_TOTO'},rules),{fareAmount:90,driverShare:85,companyGross:5,promoterShare:1.5,areaPromoterShare:0.75,companyNet:2.75});
+assert.equal(evaluateLateArrival({committedArrivalAt:'2026-07-11T10:00:00Z',actualArrivalAt:'2026-07-11T10:10:00Z',graceMinutes:3,perMinutePenalty:2,maxPenalty:20}).penalty,14);
+console.log('v3.0 business rules test passed');

@@ -1,0 +1,10 @@
+import 'package:flutter/material.dart';
+import '../design/astride_theme.dart';
+import '../state/driver_controller.dart';
+class DriverProfileScreen extends StatelessWidget{const DriverProfileScreen({super.key,required this.controller});final DriverController controller;@override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:Text(controller.t('profile'))),body:ListView(padding:const EdgeInsets.all(16),children:[
+  const Center(child:CircleAvatar(radius:44,backgroundColor:AstrideColors.navy,child:Icon(Icons.person,size:46,color:Colors.white))),const SizedBox(height:10),const Center(child:Text('Sujan Das',style:TextStyle(fontSize:22,fontWeight:FontWeight.w800,color:AstrideColors.navy))),Center(child:Text(controller.session?.mobile??'',style:const TextStyle(color:AstrideColors.muted))),const SizedBox(height:20),
+  Card(child:Column(children:[_Tile(Icons.verified_user_outlined,controller.t('approvalStatus'),controller.t('approved')), _Tile(Icons.electric_rickshaw_outlined,controller.t('vehicleDetails'),'WB 42 C 1234'),_Tile(Icons.description_outlined,controller.t('documents'),controller.t('verified')), _Tile(Icons.account_balance_outlined,controller.t('bankAndUpi'),controller.t('configured'))])),
+  const SizedBox(height:14),Card(child:Column(children:[ListTile(leading:const Icon(Icons.language),title:Text(controller.t('changeLanguage')),trailing:const Icon(Icons.chevron_right)),ListTile(leading:const Icon(Icons.support_agent),title:Text(controller.t('helpAndSupport')),trailing:const Icon(Icons.chevron_right)),ListTile(leading:const Icon(Icons.privacy_tip_outlined),title:Text(controller.t('privacyAndTerms')),trailing:const Icon(Icons.chevron_right))])),
+  const SizedBox(height:18),OutlinedButton.icon(onPressed:controller.logout,icon:const Icon(Icons.logout,color:AstrideColors.danger),label:Text(controller.t('logout')))
+]));}
+class _Tile extends StatelessWidget{const _Tile(this.icon,this.title,this.value);final IconData icon;final String title,value;@override Widget build(BuildContext c)=>ListTile(leading:Icon(icon,color:AstrideColors.green),title:Text(title),subtitle:Text(value),trailing:const Icon(Icons.chevron_right));}
