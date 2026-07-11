@@ -18,7 +18,7 @@ class PushNotificationService {
     await messaging.requestPermission(alert: true, badge: true, sound: true);
     final token = await messaging.getToken();
     if (token != null) {
-      await api.post('/v1/devices/register', {
+      await api.postJson('/v1/devices/register', {
         'actorType': actorType,
         'actorId': actorId,
         'deviceId': deviceId,
@@ -29,7 +29,7 @@ class PushNotificationService {
       });
     }
     messaging.onTokenRefresh.listen((next) async {
-      await api.post('/v1/devices/register', {
+      await api.postJson('/v1/devices/register', {
         'actorType': actorType,
         'actorId': actorId,
         'deviceId': deviceId,

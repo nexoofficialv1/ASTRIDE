@@ -12,6 +12,8 @@ class AppConfig {
     'ENABLE_DEBUG_LOGS',
     defaultValue: true,
   );
+  static const requestTimeout = Duration(seconds: 20);
+
   static const allowInsecureHttp = bool.fromEnvironment(
     'ALLOW_INSECURE_HTTP',
     defaultValue: true,

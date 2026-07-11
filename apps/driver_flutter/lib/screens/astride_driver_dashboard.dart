@@ -188,9 +188,34 @@ class _Action extends StatelessWidget {
   final String label;
   final bool danger;
   @override
-  Widget build(BuildContext context) => Card(child: InkWell(borderRadius: BorderRadius.circular(18), onTap: () {}, child: Padding(padding: const EdgeInsets.all(12), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Icon(icon, color: danger ? AstrideColors.danger : AstrideColors.green),
-        const SizedBox(height: 8),
-        Text(label, textAlign: TextAlign.center, maxLines: 2, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-      ])));
+  Widget build(BuildContext context) {
+    return Card(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () {},
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                color: danger ? AstrideColors.danger : AstrideColors.green,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
