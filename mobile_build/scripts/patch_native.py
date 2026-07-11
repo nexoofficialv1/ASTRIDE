@@ -108,10 +108,12 @@ def patch_manifest(app_dir: Path, app: str) -> None:
 
     if app == "driver_flutter":
         source = app_dir / "android_native/app/src/main/kotlin/in/astride/driver"
-        target = app_dir / "android/app/src/main/kotlin/in/astride/driver"
+        target = app_dir / "android/app/src/main/kotlin/com/astride/astride_driver"
         target.mkdir(parents=True, exist_ok=True)
         for native_file in source.glob("*.kt"):
-            shutil.copy2(native_file, target / native_file.name)
+            content = native_file.read_text(encoding="utf-8")
+            content = content.replace("package `in`.astride.driver", "package com.astride.astride_driver")
+            (target / native_file.name).write_text(content, encoding="utf-8")
 
     values = app_dir / "android/app/src/main/res/values"
     values.mkdir(parents=True, exist_ok=True)

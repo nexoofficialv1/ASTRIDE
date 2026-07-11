@@ -19,6 +19,7 @@
     "test:sprint10": "node tests/sprint10-production-readiness.mjs",
     "test:sprint10b": "node tests/sprint10b-release-pipeline.mjs",
     "test:sprint10c": "node tests/sprint10c-field-test.mjs",
-    "test:campaigns": "node tests/offer-campaign-v311.mjs"
+    "test:campaigns": "node tests/offer-campaign-v311.mjs",
+    "test:android-package-id": "node tests/android-package-id-v3115.mjs"
   }
 }
