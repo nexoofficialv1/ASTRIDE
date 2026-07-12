@@ -2,11 +2,11 @@ class AppConfig {
   static const environment = String.fromEnvironment('APP_ENV', defaultValue: 'local');
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:3333',
+    defaultValue: 'https://astaride.nexoofficial.in',
   );
   static const wsBaseUrl = String.fromEnvironment(
     'WS_BASE_URL',
-    defaultValue: 'ws://10.0.2.2:3333',
+    defaultValue: 'wss://astaride.nexoofficial.in',
   );
   static const enableDebugLogs = bool.fromEnvironment(
     'ENABLE_DEBUG_LOGS',
