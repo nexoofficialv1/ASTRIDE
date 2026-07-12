@@ -63,7 +63,22 @@ class _LoginScreen extends StatelessWidget {
       TextField(controller: mobile, keyboardType: TextInputType.phone, decoration: InputDecoration(labelText: controller.t('mobileNumber'), prefixIcon: const Icon(Icons.phone_android_rounded))),
       if (sent) ...[const SizedBox(height: 14), TextField(controller: otp, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: controller.t('otp'), prefixIcon: const Icon(Icons.lock_outline_rounded)))],
       const SizedBox(height: 20), FilledButton(
-        onPressed: controller.busy ? null : () async { if (!sent) { await controller.requestOtp(mobile.text); onSent(); } else { await controller.login(mobile.text, otp.text); } },
+        onPressed: controller.busy ? null : () async {
+          try {
+            if (!sent) {
+              await controller.requestOtp(mobile.text);
+              onSent();
+            } else {
+              await controller.login(mobile.text, otp.text);
+            }
+          } catch (e) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+              );
+            }
+          }
+        },
         child: controller.busy ? const CircularProgressIndicator() : Text(sent ? controller.t('verifyOtp') : controller.t('sendOtp')),
       ),
       const SizedBox(height: 18), Text(controller.t('termsConsent'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: AstrideColors.muted)),

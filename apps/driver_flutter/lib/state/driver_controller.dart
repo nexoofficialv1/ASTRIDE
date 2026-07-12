@@ -47,8 +47,22 @@ class DriverController extends ChangeNotifier {
   }
 
   Future<void> requestOtp(String mobile) async {
-    final response = await api.postJson('/v1/auth/otp/request', {'mobile': mobile});
-    _otpSessionId = response['sessionId']?.toString();
+    final response = await api.postJson(
+      '/v1/auth/otp/request',
+      {'mobile': _normalizeMobile(mobile)},
+    );
+    final id = response['sessionId']?.toString();
+    if (id == null || id.isEmpty) {
+      throw ApiException('OTP session was not returned by the server.');
+    }
+    _otpSessionId = id;
+  }
+
+  String _normalizeMobile(String value) {
+    final digits = value.replaceAll(RegExp(r'\\D'), '');
+    if (digits.length == 10) return '91$digits';
+    if (digits.length == 12 && digits.startsWith('91')) return digits;
+    return digits;
   }
 
   Future<void> login(String mobile, String otp) async {
@@ -58,7 +72,7 @@ class DriverController extends ChangeNotifier {
       if (_otpSessionId == null) throw StateError('OTP session missing');
       final passengerAuth = await api.postJson('/v1/auth/otp/verify', {'sessionId': _otpSessionId, 'code': otp});
       api.token = passengerAuth['accessToken']?.toString();
-      final response = await api.postJson('/v1/drivers/register', {'mobile': mobile});
+      final response = await api.postJson('/v1/drivers/register', {'mobile': _normalizeMobile(mobile)});
       final driver = (response['driver'] as Map).cast<String, dynamic>();
       session = Session(
         userId: driver['id'].toString(),

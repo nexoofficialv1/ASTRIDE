@@ -6,7 +6,7 @@ on:
       app:
         description: App to release
         type: choice
-        options: [passenger_flutter, driver_flutter, partner_flutter]
+        options: [all, passenger_flutter, driver_flutter, partner_flutter]
         required: true
       environment:
         description: Runtime environment
@@ -37,6 +37,10 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(inputs.app == 'all' && '["passenger_flutter","driver_flutter","partner_flutter"]' || format('["{0}"]', inputs.app)) }}
     steps:
       - uses: actions/checkout@v4
       - name: Validate version and release inputs
@@ -56,12 +60,16 @@ jobs:
         run: |
           [[ "${{ inputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]
           [[ "${{ inputs.build_number }}" =~ ^[1-9][0-9]*$ ]]
-          mobile_build/scripts/validate_android_release_secrets.sh "${{ inputs.app }}" "${{ inputs.environment }}"
+          mobile_build/scripts/validate_android_release_secrets.sh "${{ matrix.app }}" "${{ inputs.environment }}"
 
   build:
     needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(inputs.app == 'all' && '["passenger_flutter","driver_flutter","partner_flutter"]' || format('["{0}"]', inputs.app)) }}
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -73,7 +81,7 @@ jobs:
           distribution: temurin
           java-version: '17'
       - name: Bootstrap selected mobile app
-        run: mobile_build/scripts/bootstrap_mobile.sh "${{ inputs.app }}"
+        run: mobile_build/scripts/bootstrap_mobile.sh "${{ matrix.app }}"
       - name: Render validated runtime environment
         env:
           PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL }}
@@ -83,9 +91,9 @@ jobs:
         run: mobile_build/scripts/render_mobile_env.sh "${{ inputs.environment }}"
       - name: Inject Firebase configuration
         env:
-          FIREBASE_ANDROID_CONFIG_BASE64: ${{ inputs.app == 'passenger_flutter' && secrets.PASSENGER_FIREBASE_ANDROID_BASE64 || (inputs.app == 'driver_flutter' && secrets.DRIVER_FIREBASE_ANDROID_BASE64 || secrets.PARTNER_FIREBASE_ANDROID_BASE64) }}
+          FIREBASE_ANDROID_CONFIG_BASE64: ${{ matrix.app == 'passenger_flutter' && secrets.PASSENGER_FIREBASE_ANDROID_BASE64 || (matrix.app == 'driver_flutter' && secrets.DRIVER_FIREBASE_ANDROID_BASE64 || secrets.PARTNER_FIREBASE_ANDROID_BASE64) }}
           FIREBASE_REQUIRED: 'false'
-        run: mobile_build/scripts/inject_firebase.sh "${{ inputs.app }}"
+        run: mobile_build/scripts/inject_firebase.sh "${{ matrix.app }}"
       - name: Restore Android signing keystore
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -94,7 +102,7 @@ jobs:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/astride-upload.jks"
-          cat > "apps/${{ inputs.app }}/android/key.properties" <<PROP
+          cat > "apps/${{ matrix.app }}/android/key.properties" <<PROP
           storePassword=$STORE_PASSWORD
           keyPassword=$KEY_PASSWORD
           keyAlias=$KEY_ALIAS
@@ -105,14 +113,14 @@ jobs:
           GOOGLE_MAPS_ANDROID_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_KEY }}
           RELEASE_VERSION: ${{ inputs.version }}
           RELEASE_BUILD_NUMBER: ${{ inputs.build_number }}
-        run: mobile_build/scripts/build_android.sh "${{ inputs.app }}" release "${{ inputs.environment }}"
+        run: mobile_build/scripts/build_android.sh "${{ matrix.app }}" release "${{ inputs.environment }}"
       - name: Package and checksum artifacts
         env:
           RELEASE_BUILD_NUMBER: ${{ inputs.build_number }}
-        run: mobile_build/scripts/package_android_artifacts.sh "${{ inputs.app }}" "${{ inputs.version }}" "${{ inputs.environment }}" "$RUNNER_TEMP/release"
+        run: mobile_build/scripts/package_android_artifacts.sh "${{ matrix.app }}" "${{ inputs.version }}" "${{ inputs.environment }}" "$RUNNER_TEMP/release"
       - uses: actions/upload-artifact@v4
         with:
-          name: ASTRIDE-${{ inputs.app }}-${{ inputs.version }}-${{ inputs.environment }}
+          name: ASTRIDE-${{ matrix.app }}-${{ inputs.version }}-${{ inputs.environment }}
           path: ${{ runner.temp }}/release/*
           if-no-files-found: error
           retention-days: 30
@@ -120,8 +128,8 @@ jobs:
         if: ${{ inputs.publish_github_release }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: android-${{ inputs.app }}-v${{ inputs.version }}-${{ inputs.environment }}
-          name: ASTRIDE ${{ inputs.app }} v${{ inputs.version }} (${{ inputs.environment }})
+          tag_name: android-${{ matrix.app }}-v${{ inputs.version }}-${{ inputs.environment }}
+          name: ASTRIDE ${{ matrix.app }} v${{ inputs.version }} (${{ inputs.environment }})
           prerelease: ${{ inputs.environment != 'production' }}
           files: ${{ runner.temp }}/release/*
           generate_release_notes: true

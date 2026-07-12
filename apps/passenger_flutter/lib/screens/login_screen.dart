@@ -36,10 +36,8 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     try {
       if (!sent) {
-        await widget.controller.api.postJson(
-          '/v1/passengers/otp/request',
-          {'mobile': mobile.text},
-        );
+        setState(() => busy = true);
+        await widget.controller.requestOtp(mobile.text);
         if (mounted) setState(() => sent = true);
         return;
       }
@@ -49,9 +47,12 @@ class _LoginScreenState extends State<LoginScreen> {
       }
       setState(() => busy = true);
       await widget.controller.login(mobile.text, otp.text);
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
-        setState(() => error = widget.controller.t('error.generic'));
+        final message = e.toString().replaceFirst('Exception: ', '');
+        setState(() => error = message.isEmpty
+            ? widget.controller.t('error.generic')
+            : message);
       }
     } finally {
       if (mounted) setState(() => busy = false);
