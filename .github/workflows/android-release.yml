@@ -81,7 +81,7 @@ jobs:
           distribution: temurin
           java-version: '17'
       - name: Bootstrap selected mobile app
-        run: mobile_build/scripts/bootstrap_mobile.sh "${{ matrix.app }}"
+        run: bash mobile_build/scripts/bootstrap_mobile.sh "${{ matrix.app }}"
       - name: Render validated runtime environment
         env:
           PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL }}

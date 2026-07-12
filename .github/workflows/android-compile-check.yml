@@ -22,7 +22,7 @@ jobs:
         with:
           node-version: '20'
       - name: Bootstrap native project
-        run: mobile_build/scripts/bootstrap_mobile.sh ${{ matrix.app }}
+        run: bash mobile_build/scripts/bootstrap_mobile.sh ${{ matrix.app }}
       - name: Analyze
         working-directory: apps/${{ matrix.app }}
         run: flutter analyze
