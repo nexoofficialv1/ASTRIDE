@@ -60,7 +60,7 @@ jobs:
         run: |
           [[ "${{ inputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]
           [[ "${{ inputs.build_number }}" =~ ^[1-9][0-9]*$ ]]
-          mobile_build/scripts/validate_android_release_secrets.sh "${{ matrix.app }}" "${{ inputs.environment }}"
+          bash mobile_build/scripts/validate_android_release_secrets.sh "${{ matrix.app }}" "${{ inputs.environment }}"
 
   build:
     needs: validate
@@ -88,12 +88,12 @@ jobs:
           PRODUCTION_WS_BASE_URL: ${{ vars.PRODUCTION_WS_BASE_URL }}
           STAGING_API_BASE_URL: ${{ vars.STAGING_API_BASE_URL }}
           STAGING_WS_BASE_URL: ${{ vars.STAGING_WS_BASE_URL }}
-        run: mobile_build/scripts/render_mobile_env.sh "${{ inputs.environment }}"
+        run: bash mobile_build/scripts/render_mobile_env.sh "${{ inputs.environment }}"
       - name: Inject Firebase configuration
         env:
           FIREBASE_ANDROID_CONFIG_BASE64: ${{ matrix.app == 'passenger_flutter' && secrets.PASSENGER_FIREBASE_ANDROID_BASE64 || (matrix.app == 'driver_flutter' && secrets.DRIVER_FIREBASE_ANDROID_BASE64 || secrets.PARTNER_FIREBASE_ANDROID_BASE64) }}
           FIREBASE_REQUIRED: 'false'
-        run: mobile_build/scripts/inject_firebase.sh "${{ matrix.app }}"
+        run: bash mobile_build/scripts/inject_firebase.sh "${{ matrix.app }}"
       - name: Restore Android signing keystore
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -113,11 +113,11 @@ jobs:
           GOOGLE_MAPS_ANDROID_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_KEY }}
           RELEASE_VERSION: ${{ inputs.version }}
           RELEASE_BUILD_NUMBER: ${{ inputs.build_number }}
-        run: mobile_build/scripts/build_android.sh "${{ matrix.app }}" release "${{ inputs.environment }}"
+        run: bash mobile_build/scripts/build_android.sh "${{ matrix.app }}" release "${{ inputs.environment }}"
       - name: Package and checksum artifacts
         env:
           RELEASE_BUILD_NUMBER: ${{ inputs.build_number }}
-        run: mobile_build/scripts/package_android_artifacts.sh "${{ matrix.app }}" "${{ inputs.version }}" "${{ inputs.environment }}" "$RUNNER_TEMP/release"
+        run: bash mobile_build/scripts/package_android_artifacts.sh "${{ matrix.app }}" "${{ inputs.version }}" "${{ inputs.environment }}" "$RUNNER_TEMP/release"
       - uses: actions/upload-artifact@v4
         with:
           name: ASTRIDE-${{ matrix.app }}-${{ inputs.version }}-${{ inputs.environment }}

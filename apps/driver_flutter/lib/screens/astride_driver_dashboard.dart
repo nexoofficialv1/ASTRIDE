@@ -103,7 +103,20 @@ class _OnlineHero extends StatelessWidget {
                 Text(controller.t(controller.online ? 'nearbyRequestsWillAppear' : 'goOnlineInstruction'), style: const TextStyle(color: Colors.white70, height: 1.35)),
               ]),
             ),
-            Switch(value: controller.online, onChanged: controller.setOnline),
+            Switch(
+              value: controller.online,
+              onChanged: (value) async {
+                try {
+                  await controller.setOnline(value);
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))),
+                    );
+                  }
+                }
+              },
+            ),
           ]),
           const SizedBox(height: 20),
           Text(controller.t('todayEarnings'), style: const TextStyle(color: Colors.white70)),

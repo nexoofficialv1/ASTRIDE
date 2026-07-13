@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:geolocator/geolocator.dart';
 import '../core/app_locale.dart';
 import '../models/runtime_config.dart';
 import '../models/session.dart';
@@ -115,9 +116,37 @@ class DriverController extends ChangeNotifier {
 
   Future<void> setOnline(bool value) async {
     if (approval != 'APPROVED') return;
+
+    Map<String, dynamic>? location;
+    if (value) {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        throw StateError('Please turn on location services.');
+      }
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        throw StateError('Location permission is required to go online.');
+      }
+      final p = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 15),
+        ),
+      );
+      location = {
+        'lat': p.latitude,
+        'lng': p.longitude,
+        'accuracy': p.accuracy,
+        'recordedAt': DateTime.now().toUtc().toIso8601String(),
+      };
+    }
+
     await api.putJson('/v1/driver-profiles/${session!.userId}/online', {
       'online': value,
-      'location': {'lat': 23.22, 'lng': 88.36, 'accuracy': 12},
+      'location': location,
     });
     online = value;
     notifyListeners();

@@ -1,0 +1,87 @@
+ASTRIDE MOBILE FINAL SOURCE v3.13.0
+
+Implemented in this package
+===========================
+PASSENGER
+- Approved navy/green/orange premium UI direction
+- Real OpenStreetMap tiles using flutter_map
+- Current GPS location and My Location button
+- Runtime location permission request
+- Destination search through ASTRIDE /v1/maps/geocode
+- Search suggestion dropdown
+- Tap-map destination selection
+- Pickup and destination markers
+- Route polyline display with flexible backend response parsing
+- Ride-type cards: Full Toto, Share Toto, Motorcycle
+- Cash / UPI / Both preference
+- SafeRide option
+- Fare quote through /v1/fares/quote-v3
+- Booking confirmation
+- Existing secure persistent login retained
+- Real API errors shown
+
+DRIVER
+- Approved ASTRIDE design system
+- Real GPS position is used when going online
+- Location permission/service errors are shown
+- Existing ride-request, active-ride, earnings and performance modules retained
+
+PROMOTER / AREA PROMOTER
+- Approved navy/green design language
+- Premium dashboard/navigation foundation
+- Existing scoped drivers, coaching, performance, earnings and withdrawal modules retained
+
+ANDROID / BUILD
+- Passenger location, internet and notification permissions retained
+- Driver foreground/background location permissions retained
+- flutter_map + latlong2 dependencies added
+- Production API and WebSocket URLs fixed
+- One workflow run can build all three apps
+- Shell scripts are explicitly called with bash to prevent permission-denied failures
+- Version 3.13.0+313 applied
+
+Important validation note
+=========================
+This source was structurally reviewed and generated from the uploaded complete mobile
+source. A real Flutter compiler is not available inside this chat runtime, so GitHub
+Android Compile Check and Mobile Quality Gate remain the authoritative compile tests.
+Do not run Signed Release until both checks are green.
+
+Termux apply
+============
+1. Copy the ZIP to the repository:
+   cp ~/storage/shared/Download/ASTRIDE_MOBILE_FINAL_SOURCE_v3.13.0.zip ~/ASTRIDE_MASTER/
+
+2. Apply:
+   cd ~/ASTRIDE_MASTER
+   unzip -o ASTRIDE_MOBILE_FINAL_SOURCE_v3.13.0.zip
+
+3. Fix local script executable flags too:
+   chmod +x mobile_build/scripts/*.sh
+   git update-index --chmod=+x mobile_build/scripts/*.sh
+
+4. Review:
+   git status
+   git diff --stat
+
+5. Push:
+   git add .
+   git commit -m "Complete ASTRIDE mobile UI map permissions and production flow"
+   git push
+
+6. Wait for:
+   - Android Compile Check
+   - Mobile Quality Gate
+
+7. Only after both are green:
+   Actions > ASTRIDE Android Signed Release
+   App: all
+   Environment: production
+   Version: 3.13.0
+   Build number: 313 (or any value higher than the last published build)
+
+Expected artifacts
+==================
+- ASTRIDE Passenger
+- ASTRIDE Driver
+- ASTRIDE Partner

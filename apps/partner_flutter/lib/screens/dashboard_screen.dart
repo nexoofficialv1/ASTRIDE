@@ -33,7 +33,7 @@ class DashboardScreen extends StatelessWidget {
             mainAxisSpacing: 12,
             childAspectRatio: 1.35,
             children: [
-              _MetricCard(s.t('totalDrivers'), '${scope['driverCount'] ?? 0}', Icons.groups_rounded, const Color(0xFF6D5DFB)),
+              _MetricCard(s.t('totalDrivers'), '${scope['driverCount'] ?? 0}', Icons.groups_rounded, const Color(0xFF0B1D45)),
               _MetricCard(s.t('onlineDrivers'), '${scope['onlineDrivers'] ?? 0}', Icons.wifi_tethering_rounded, const Color(0xFF22C55E)),
               _MetricCard(s.t('completed'), '${perf['completed'] ?? 0}', Icons.check_circle_rounded, const Color(0xFF0EA5E9)),
               _MetricCard(s.t('acceptance'), '${perf['acceptanceRate'] ?? 0}%', Icons.trending_up_rounded, const Color(0xFFF59E0B)),
@@ -200,7 +200,7 @@ class _EarningsHero extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFF0D1B3D), Color(0xFF4338CA)]),
+        gradient: const LinearGradient(colors: [Color(0xFF0B1D45), Color(0xFF173B72)]),
         borderRadius: BorderRadius.circular(22),
       ),
       child: Column(

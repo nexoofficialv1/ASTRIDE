@@ -79,7 +79,7 @@ class AstrideMapCanvas extends StatelessWidget {
       children: [
         TileLayer(
           urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          userAgentPackageName: 'in.astride.passenger',
+          userAgentPackageName: 'in.astride.driver',
           maxNativeZoom: 19,
         ),
         if (routePoints.length >= 2)

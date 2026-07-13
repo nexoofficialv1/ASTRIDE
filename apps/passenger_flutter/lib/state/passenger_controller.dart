@@ -36,6 +36,7 @@ class PassengerController extends ChangeNotifier {
         (response['config'] ?? response).cast<String, dynamic>(),
       );
     } catch (e) {
+      // Keep an existing secure session even when runtime config is temporarily unavailable.
       error = e.toString();
     }
     loading = false;
