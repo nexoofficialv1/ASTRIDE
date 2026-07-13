@@ -27,6 +27,8 @@ class PartnerController extends ChangeNotifier {
   bool get mustChangePassword =>
       session?.mustChangePassword == true;
   PartnerStrings get strings => PartnerStrings(languageCode);
+  bool get isPromoter => session?.role == 'PROMOTER';
+  bool get isAreaPromoter => session?.role == 'AREA_PROMOTER';
 
   Future<void> bootstrap() async {
     languageCode = await store.readLanguage();
@@ -267,6 +269,55 @@ class PartnerController extends ChangeNotifier {
 
         return queryOk && filterOk;
       }).toList();
+
+  Future<Map<String, dynamic>> createDriver({
+    required String fullName,
+    required String mobile,
+    required String temporaryPassword,
+    required String vehicleNumber,
+    String vehicleType = 'TOTO',
+  }) async {
+    if (!isPromoter) {
+      throw ApiException('Only a Promoter can add a Driver.');
+    }
+    Map<String, dynamic> result = {};
+    await _run(() async {
+      result = await api.post('/v1/partner/drivers/create', {
+        'fullName': fullName.trim(),
+        'mobile': mobile.replaceAll(RegExp(r'\D'), ''),
+        'temporaryPassword': temporaryPassword,
+        'preferredLanguage': languageCode,
+        'vehicle': {
+          'number': vehicleNumber.trim(),
+          'type': vehicleType,
+        },
+      });
+    });
+    await refresh();
+    return result;
+  }
+
+  Future<Map<String, dynamic>> loadDriverReview(String driverId) =>
+      api.get('/v1/partner/drivers/$driverId');
+
+  Future<Map<String, dynamic>> reviewDriver(
+    String driverId, {
+    required String status,
+    String? remarks,
+  }) async {
+    Map<String, dynamic> result = {};
+    await _run(() async {
+      result = await api.post(
+        '/v1/partner/drivers/$driverId/review',
+        {
+          'status': status,
+          'remarks': remarks?.trim(),
+        },
+      );
+    });
+    await refresh();
+    return result;
+  }
 
   Future<void> coach(
     String driverId,

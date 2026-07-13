@@ -1,0 +1,43 @@
+ASTRIDE FINAL MARKET TEST BUILD 325 — DRIVER VERIFICATION CONTROL
+
+Build 324 is superseded by this package.
+
+Authority
+=========
+Driver documents are verified by Admin only.
+Promoters and Area Promoters do not receive approval authority.
+
+Admin Console
+=============
+Drivers -> Review documents
+
+Admin can:
+- Open each uploaded document
+- Approve or reject each document separately
+- Record remarks / rejection reason
+- Approve, reject or suspend the Driver
+- See missing, pending, rejected and approved counts
+
+Approval safety
+===============
+The Driver cannot be approved until all five mandatory documents are approved:
+1. Identity document
+2. Vehicle registration
+3. Vehicle photo
+4. Driver profile photo
+5. Bank passbook / cancelled cheque
+
+A rejected document immediately makes the Driver ineligible to go online.
+The Driver may upload a corrected document and submit again.
+
+Deployment
+==========
+1. Deploy ASTRIDE_FINAL_ADMIN_VERIFICATION_BACKEND_v3.15.1.zip to site1
+   with Overwrite, then recycle Application Pool.
+2. Apply this full Build 325 source to GitHub.
+3. Wait for Android Compile Check and Mobile Quality Gate.
+4. Signed Release:
+   App: all
+   Environment: production
+   Version: 3.15.1
+   Build number: 325

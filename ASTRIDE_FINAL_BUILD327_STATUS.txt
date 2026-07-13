@@ -1,0 +1,7 @@
+ASTRIDE FINAL MARKET TEST BUILD 327
+
+Build 326 is superseded.
+
+Every Driver must be assigned under an active Promoter. Admin direct creation now requires a Promoter dropdown; Area Promoter is derived automatically. Existing unassigned Drivers can be assigned/reassigned from Admin Console > Drivers > Final review. Reassignment or document replacement resets the Promoter, Area Promoter and Admin stage approvals while preserving uploaded files. Promoter partial approval remains mandatory. Admin may bypass only Area Promoter approval with a written reason. Legacy public Driver self-registration is disabled.
+
+Signed Release: Version 3.16.1, Build 327.

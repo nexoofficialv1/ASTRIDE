@@ -52,7 +52,7 @@ class DriverController extends ChangeNotifier {
 
     try {
       final response = await api.getJson(
-        '/v1/mobile/config?app=DRIVER&version=3.15.0',
+        '/v1/mobile/config?app=DRIVER&version=3.15.1',
       );
       config = RuntimeConfig.fromJson(
         (response['config'] ?? response).cast<String, dynamic>(),

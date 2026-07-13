@@ -1,0 +1,49 @@
+ASTRIDE FINAL MARKET TEST BUILD 326 — HIERARCHICAL DRIVER APPROVAL
+
+This package supersedes Build 325.
+
+Final approval workflow
+=======================
+1. PROMOTER adds the Driver from Partner App.
+2. Driver changes temporary password and uploads all five mandatory documents.
+3. PROMOTER gives partial approval and sends the Driver to the Area Promoter.
+4. AREA PROMOTER reviews and approves the Driver for Admin review.
+5. ADMIN final-verifies each document and gives final approval.
+6. ADMIN may bypass the Area Promoter stage only after Promoter approval,
+   only after all documents are final-verified, and only with a written reason.
+
+Authority rules
+===============
+- Promoter can add Drivers only under their own account.
+- Area Promoter cannot add Drivers.
+- Promoter cannot final-activate a Driver.
+- Area Promoter cannot final-activate a Driver.
+- Only Admin final approval makes a Driver eligible to go online.
+- Admin cannot bypass Promoter partial approval.
+- Admin can bypass Area Promoter approval with a recorded reason.
+
+Partner App
+===========
+- Promoter-only Add Driver button.
+- Temporary Driver login creation.
+- Driver documents and approval chain visible.
+- Promoter partial approval action.
+- Area Promoter approval action.
+- Role/scope checks enforced by backend.
+
+Admin Console
+=============
+- Three-stage approval chain visible.
+- Final document verification.
+- Final Approve button after Area Promoter approval.
+- Approve without Area Promoter button with mandatory reason.
+- Reject and Suspend controls retained.
+
+Deployment
+==========
+1. Deploy ASTRIDE_FINAL_HIERARCHY_BACKEND_ADMIN_v3.16.0.zip to site1
+   with Overwrite, then recycle Application Pool.
+2. Open Admin Console in Incognito or clear its cache.
+3. Apply this full Build 326 source to GitHub.
+4. Wait for Android Compile Check and Mobile Quality Gate.
+5. Signed Release: App all, production, Version 3.16.0, Build 326.

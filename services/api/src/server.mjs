@@ -13,7 +13,7 @@ import { rankDrivers } from './domain/driver-matching.mjs';
 import { estimateFare } from './domain/fare-engine.mjs';
 import { createBooking, getBooking, updateBooking, acceptBooking, listBookingEvents, listBookingsForPassenger, upsertDriver, getDriver, getAvailableDrivers, listAllBookings, listAllRuntimeDrivers } from './store/memory-store.mjs';
 import { createOtp, verifyOtp, createPassengerSession, authenticatePassengerToken, revokePassengerSession, upsertPassenger, getPassenger, listPlaces, addPlace, addRating, addComplaint, listAllComplaints, updateComplaint } from './store/passenger-store.mjs';
-import { registerDriver, getDriverProfile, updateDriverProfile, addDriverDocument, listDriverDocuments, reviewDriver, setDriverOnline, getDriverWallet, creditDriver, requestSettlement, listSettlements, updateSettlement, listAllDriverProfiles, listAllSettlements, createDriverSession, authenticateDriverToken, revokeDriverSession, findDriverByMobile } from './store/driver-store.mjs';
+import { registerDriver, getDriverProfile, updateDriverProfile, addDriverDocument, listDriverDocuments, reviewDriverDocument, getDriverVerificationSummary, setDriverApprovalContext, getDriverApprovalSummary, reviewDriverStage, reviewDriver, setDriverOnline, getDriverWallet, creditDriver, requestSettlement, listSettlements, updateSettlement, listAllDriverProfiles, listAllSettlements, createDriverSession, authenticateDriverToken, revokeDriverSession, findDriverByMobile } from './store/driver-store.mjs';
 import { onboardingReadiness, calculateDriverEarning } from './domain/driver-rules.mjs';
 import { validateLocationSample } from './domain/location-rules.mjs';
 import { createPayment, getPayment, getPaymentByBooking, updatePayment, addRefund, listRefunds, listPaymentLedger, listAllPayments, findPaymentByProviderOrder, findPaymentByProviderPayment, recordWebhookEvent, listWebhookEvents, addReconciliation, listReconciliations } from './store/payment-store.mjs';
@@ -108,7 +108,7 @@ const driverUser=authenticateDriverToken(req.headers.authorization)||staffDriver
 const requirePassenger=(id=null)=>{if(!passengerUser){json(res,401,{error:'passenger_auth_required'});return false;}if(id&&passengerUser.id!==id){json(res,403,{error:'passenger_scope_denied'});return false;}return true;};
 const requireDriver=(id=null)=>{if(!driverUser){json(res,401,{error:'driver_auth_required'});return false;}if(id&&driverUser.id!==id){json(res,403,{error:'driver_scope_denied'});return false;}return true;};
 const canAccessBooking=(b)=>Boolean(b&&(adminUser&&adminCan(adminUser,'rides.read')||passengerUser&&b.passengerId===passengerUser.id||driverUser&&b.driverId===driverUser.id));
-if(req.method==='GET'&&path==='/health')return json(res,200,{ok:true,service:'local-ride-api',version:'3.15.0-final-market-test',architecture:'mobile-first'});if(req.method==='GET'&&/^\/v1\/uploads\/[^/]+\/[^/]+\/[^/]+$/.test(path)){
+if(req.method==='GET'&&path==='/health')return json(res,200,{ok:true,service:'local-ride-api',version:'3.16.0-final-approval-workflow',architecture:'mobile-first'});if(req.method==='GET'&&/^\/v1\/uploads\/[^/]+\/[^/]+\/[^/]+$/.test(path)){
   const parts=path.split('/');
   const actorType=safeUploadSegment(parts[3]).toLowerCase();
   const actorId=safeUploadSegment(parts[4]);
@@ -239,7 +239,145 @@ if(req.method==='POST'&&path==='/v1/uploads'){
 }
 
 if(req.method==='GET'&&path==='/v1/partner/dashboard'){if(!requirePartner())return;const out=promoterDashboard(partnerUser.id,{bookings:listAllBookings(),runtimeDrivers:listAllRuntimeDrivers(),from:url.searchParams.get('from'),to:url.searchParams.get('to')});return json(res,200,out);}
-if(req.method==='GET'&&path==='/v1/partner/drivers'){if(!requirePartner())return;const items=driverPerformanceRows(partnerUser.id,{bookings:listAllBookings(),runtimeDrivers:listAllRuntimeDrivers(),profiles:listAllDriverProfiles(),from:url.searchParams.get('from'),to:url.searchParams.get('to')});return json(res,200,{items});}
+if(req.method==='POST'&&path==='/v1/partner/drivers/create'){
+  if(!requirePartner())return;
+  if(partnerUser.role!=='PROMOTER'){
+    return json(res,403,{error:'only_promoter_can_add_driver'});
+  }
+  const p=await readBody(req);
+  requireFields(p,['mobile','fullName','temporaryPassword']);
+  try{
+    if(findDriverByMobile(p.mobile)){
+      return json(res,409,{error:'driver_mobile_already_registered'});
+    }
+    const driver=registerDriver({
+      mobile:String(p.mobile).replace(/\D/g,''),
+      fullName:p.fullName,
+      preferredLanguage:p.preferredLanguage||'bn',
+      vehicle:p.vehicle||{},
+      primaryZoneId:p.primaryZoneId||null,
+      emergencyContact:p.emergencyContact||null,
+      createdByType:'PROMOTER',
+      createdById:partnerUser.id,
+      promoterId:partnerUser.id,
+      areaPromoterId:partnerUser.areaPromoterId||null,
+    });
+    const staff=createStaffAccount({
+      role:'DRIVER',
+      mobile:String(p.mobile).replace(/\D/g,''),
+      loginId:p.loginId||driver.id,
+      name:p.fullName,
+      password:p.temporaryPassword,
+      linkedEntityId:driver.id,
+      areaId:partnerUser.areaId||null,
+      createdBy:partnerUser.id,
+      mustChangePassword:true,
+    });
+    linkDriver({
+      promoterId:partnerUser.id,
+      areaPromoterId:partnerUser.areaPromoterId||null,
+      driverId:driver.id,
+    });
+    setDriverApprovalContext(driver.id,{
+      createdByType:'PROMOTER',
+      createdById:partnerUser.id,
+      promoterId:partnerUser.id,
+      areaPromoterId:partnerUser.areaPromoterId||null,
+    });
+    return json(res,201,{
+      driver:getDriverProfile(driver.id),
+      staff,
+      approval:getDriverApprovalSummary(driver.id),
+    });
+  }catch(error){return json(res,422,{error:error.message});}
+}
+if(req.method==='GET'&&path==='/v1/partner/drivers'){
+  if(!requirePartner())return;
+  const scoped=new Set(scopedDriverIds(partnerUser.id));
+  const profiles=listAllDriverProfiles()
+    .filter(profile=>scoped.has(profile.id))
+    .map(profile=>{
+      const approval=getDriverApprovalSummary(profile.id);
+      const verification=getDriverVerificationSummary(profile.id);
+      const stage=partnerUser.role==='AREA_PROMOTER'
+        ?'AREA_PROMOTER'
+        :'PROMOTER';
+      return {
+        ...profile,
+        approval,
+        verification,
+        partnerActions:{
+          stage,
+          canApprove:stage==='PROMOTER'
+            ?approval.canPromoterApprove
+            :approval.canAreaApprove,
+          canReject:true,
+        },
+      };
+    });
+  const items=driverPerformanceRows(partnerUser.id,{
+    bookings:listAllBookings(),
+    runtimeDrivers:listAllRuntimeDrivers(),
+    profiles,
+    from:url.searchParams.get('from'),
+    to:url.searchParams.get('to'),
+  });
+  return json(res,200,{items});
+}
+if(req.method==='GET'&&/^\/v1\/partner\/drivers\/[^/]+$/.test(path)){
+  if(!requirePartner())return;
+  const driverId=path.split('/')[4];
+  if(!scopedDriverIds(partnerUser.id).includes(driverId)){
+    return json(res,403,{error:'driver_outside_scope'});
+  }
+  const profile=getDriverProfile(driverId);
+  if(!profile)return json(res,404,{error:'driver_not_found'});
+  const approval=getDriverApprovalSummary(driverId);
+  const stage=partnerUser.role==='AREA_PROMOTER'
+    ?'AREA_PROMOTER'
+    :'PROMOTER';
+  return json(res,200,{
+    profile,
+    documents:listDriverDocuments(driverId),
+    verification:getDriverVerificationSummary(driverId),
+    approval,
+    partnerActions:{
+      stage,
+      canApprove:stage==='PROMOTER'
+        ?approval.canPromoterApprove
+        :approval.canAreaApprove,
+      canReject:true,
+    },
+  });
+}
+if(req.method==='POST'&&/^\/v1\/partner\/drivers\/[^/]+\/review$/.test(path)){
+  if(!requirePartner())return;
+  const driverId=path.split('/')[4];
+  const link=getDriverPartnerLink(driverId);
+  const stage=partnerUser.role==='AREA_PROMOTER'
+    ?'AREA_PROMOTER'
+    :'PROMOTER';
+  const inScope=stage==='PROMOTER'
+    ?link?.promoterId===partnerUser.id
+    :link?.areaPromoterId===partnerUser.id;
+  if(!inScope)return json(res,403,{error:'driver_outside_scope'});
+  const p=await readBody(req);
+  requireFields(p,['status']);
+  try{
+    const profile=reviewDriverStage(driverId,{
+      stage,
+      status:p.status,
+      actorId:partnerUser.id,
+      remarks:p.remarks||null,
+    });
+    return json(res,200,{
+      profile,
+      documents:listDriverDocuments(driverId),
+      verification:getDriverVerificationSummary(driverId),
+      approval:getDriverApprovalSummary(driverId),
+    });
+  }catch(error){return json(res,422,{error:error.message});}
+}
 if(req.method==='POST'&&path==='/v1/partner/coaching'){if(!requirePartner())return;const p=await readBody(req);requireFields(p,['driverId','type','message']);if(!scopedDriverIds(partnerUser.id).includes(p.driverId))return json(res,403,{error:'driver_outside_scope'});return json(res,201,addCoachingLog({promoterId:partnerUser.id,areaPromoterId:partnerUser.role==='AREA_PROMOTER'?partnerUser.id:null,...p}));}
 if(req.method==='GET'&&path==='/v1/partner/coaching'){if(!requirePartner())return;return json(res,200,{items:listCoachingLogs(partnerUser.id)});}
 if(req.method==='GET'&&path==='/v1/partner/earnings'){if(!requirePartner())return;return json(res,200,earningsSummary(partnerUser.id,url.searchParams.get('month')));}
@@ -260,38 +398,36 @@ if(req.method==='GET'&&path==='/v1/admin/staff'){
 if(req.method==='POST'&&path==='/v1/admin/drivers/create'){
   if(!requireAdmin('drivers.manage')&&!adminCan(adminUser,'*'))return;
   const p=await readBody(req);
-  requireFields(p,['mobile','fullName','temporaryPassword']);
+  requireFields(p,['mobile','fullName','temporaryPassword','promoterId']);
   try{
+    const normalizedMobile=String(p.mobile).replace(/\D/g,'');
+    if(!String(p.promoterId||'').trim())return json(res,422,{error:'promoter_assignment_required'});
+    const promoter=getPromoter(String(p.promoterId).trim());
+    if(!promoter||promoter.role!=='PROMOTER'||promoter.status!=='ACTIVE')return json(res,422,{error:'active_promoter_required'});
+    const areaPromoterId=promoter.areaPromoterId||null;
+    if(areaPromoterId){
+      const areaPromoter=getPromoter(areaPromoterId);
+      if(!areaPromoter||areaPromoter.role!=='AREA_PROMOTER'||areaPromoter.status!=='ACTIVE')return json(res,422,{error:'promoter_area_hierarchy_invalid'});
+    }
+    if(findDriverByMobile(normalizedMobile))return json(res,409,{error:'driver_mobile_already_registered'});
     const driver=registerDriver({
-      mobile:p.mobile,
-      fullName:p.fullName,
-      preferredLanguage:p.preferredLanguage||'en',
-      vehicle:p.vehicle||{},
-      primaryZoneId:p.primaryZoneId||null,
-      bank:p.bank||{},
+      mobile:normalizedMobile,fullName:p.fullName,
+      preferredLanguage:p.preferredLanguage||'en',vehicle:p.vehicle||{},
+      primaryZoneId:p.primaryZoneId||null,bank:p.bank||{},
       emergencyContact:p.emergencyContact||null,
+      createdByType:'ADMIN_ASSIGNED',createdById:adminUser.id,
+      promoterId:promoter.id,areaPromoterId,
     });
     const staff=createStaffAccount({
-      role:'DRIVER',
-      mobile:p.mobile,
-      loginId:p.loginId||driver.id,
-      name:p.fullName,
-      password:p.temporaryPassword,
-      linkedEntityId:driver.id,
-      areaId:p.areaId||null,
-      createdBy:adminUser.id,
+      role:'DRIVER',mobile:normalizedMobile,loginId:p.loginId||driver.id,
+      name:p.fullName,password:p.temporaryPassword,linkedEntityId:driver.id,
+      areaId:p.areaId||promoter.areaId||null,createdBy:adminUser.id,
       mustChangePassword:true,
     });
-    if(p.promoterId)linkDriver({
-      promoterId:p.promoterId,
-      areaPromoterId:p.areaPromoterId||null,
-      driverId:driver.id,
-    });
-    writeAudit(adminUser.id,'DRIVER_STAFF_CREATED',{
-      driverId:driver.id,
-      staffId:staff.id,
-    });
-    return json(res,201,{driver,staff});
+    const assignment=linkDriver({promoterId:promoter.id,areaPromoterId,driverId:driver.id});
+    setDriverApprovalContext(driver.id,{createdByType:'ADMIN_ASSIGNED',createdById:adminUser.id,promoterId:promoter.id,areaPromoterId});
+    writeAudit(adminUser.id,'DRIVER_STAFF_CREATED',{driverId:driver.id,staffId:staff.id,promoterId:promoter.id,areaPromoterId});
+    return json(res,201,{driver:getDriverProfile(driver.id),staff,assignment,promoter,areaPromoter:areaPromoterId?getPromoter(areaPromoterId):null,approval:getDriverApprovalSummary(driver.id)});
   }catch(error){return json(res,422,{error:error.message});}
 }
 if(req.method==='POST'&&path==='/v1/admin/partners/create'){
@@ -305,6 +441,7 @@ if(req.method==='POST'&&path==='/v1/admin/partners/create'){
       name:p.name,
       status:'ACTIVE',
       areaPromoterId:p.areaPromoterId||null,
+      areaId:p.areaId||null,
     });
     const staff=createStaffAccount({
       role:p.role,
@@ -558,7 +695,14 @@ if(req.method==='GET'&&/^\/v1\/payments\/[^/]+$/.test(path)){if(!passengerUser&&
 if(req.method==='POST'&&/^\/v1\/payments\/[^/]+\/refunds$/.test(path)){if(!requireAdmin('payments.read'))return;const paymentId=path.split('/')[3],payment=getPayment(paymentId);if(!payment)return json(res,404,{error:'payment_not_found'});const p=await readBody(req);requireFields(p,['amountPaise']);const cfg=getAdminRuntimeConfig();if(!cfg.payments.allowPartialRefund&&p.amountPaise!==payment.amountPaise)throw new Error('Partial refunds are disabled');await getPaymentAdapter(payment.provider).refund(payment.providerPaymentId,p.amountPaise,getAdminRuntimeConfig().providers.payments.mode);return json(res,201,addRefund(paymentId,p.amountPaise,p.reason));}
 if(req.method==='GET'&&/^\/v1\/bookings\/[^/]+\/payment$/.test(path)){if(!passengerUser&&!adminUser)return json(res,401,{error:'authentication_required'});const payment=getPaymentByBooking(path.split('/')[3]);if(payment&&passengerUser&&payment.passengerId!==passengerUser.id&&!adminUser)return json(res,403,{error:'payment_scope_denied'});return payment?json(res,200,payment):json(res,404,{error:'payment_not_found'});}
 
-if(req.method==='POST'&&path==='/v1/drivers/register'){if(!requirePassenger())return;const p=await readBody(req);requireFields(p,['mobile']);if(String(p.mobile).replace(/\D/g,'')!==String(passengerUser.mobile).replace(/\D/g,''))return json(res,403,{error:'driver_mobile_mismatch'});const existing=findDriverByMobile(p.mobile);const d=existing||registerDriver(p);const session=createDriverSession(d.id);return json(res,existing?200:201,{driver:d,accessToken:session.token,expiresInSeconds:session.expiresInSeconds});}
+if(req.method==='POST'&&path==='/v1/drivers/register'){
+  if(!requirePassenger())return;const p=await readBody(req);requireFields(p,['mobile']);
+  if(String(p.mobile).replace(/\D/g,'')!==String(passengerUser.mobile).replace(/\D/g,''))return json(res,403,{error:'driver_mobile_mismatch'});
+  const existing=findDriverByMobile(p.mobile);
+  if(!existing)return json(res,403,{error:'driver_account_must_be_created_by_promoter_or_admin'});
+  const session=createDriverSession(existing.id);
+  return json(res,200,{driver:existing,accessToken:session.token,expiresInSeconds:session.expiresInSeconds});
+}
 if(req.method==='GET'&&/^\/v1\/driver-profiles\/[^/]+$/.test(path)){const id=path.split('/')[3];if(!requireDriver(id))return;const d=getDriverProfile(id);return d?json(res,200,d):json(res,404,{error:'driver_not_found'});}
 if(req.method==='PATCH'&&/^\/v1\/driver-profiles\/[^/]+$/.test(path)){
   const id=path.split('/')[3];
@@ -575,7 +719,35 @@ if(req.method==='PATCH'&&/^\/v1\/driver-profiles\/[^/]+$/.test(path)){
 if(req.method==='POST'&&/^\/v1\/driver-profiles\/[^/]+\/documents$/.test(path)){const id=path.split('/')[3];if(!requireDriver(id))return;const p=await readBody(req);requireFields(p,['type','fileUrl']);const d=addDriverDocument(id,p);return d?json(res,201,d):json(res,404,{error:'driver_not_found'});}
 if(req.method==='GET'&&/^\/v1\/driver-profiles\/[^/]+\/documents$/.test(path)){const id=path.split('/')[3];if(!requireDriver(id))return;return json(res,200,{items:listDriverDocuments(id)});}
 if(req.method==='GET'&&/^\/v1\/driver-profiles\/[^/]+\/readiness$/.test(path)){const id=path.split('/')[3];if(!requireDriver(id))return;const d=getDriverProfile(id);return d?json(res,200,onboardingReadiness(d,listDriverDocuments(id))):json(res,404,{error:'driver_not_found'});}
-if(req.method==='POST'&&/^\/v1\/admin\/drivers\/[^/]+\/review$/.test(path)){if(!requireAdmin('drivers.read'))return;const p=await readBody(req);requireFields(p,['status']);const d=reviewDriver(path.split('/')[4],p);return d?json(res,200,d):json(res,404,{error:'driver_not_found'});}
+if(req.method==='POST'&&/^\/v1\/admin\/drivers\/[^/]+\/review$/.test(path)){
+  if(!requireAdmin('drivers.manage')&&!adminCan(adminUser,'*'))return;
+  const driverId=path.split('/')[4];
+  const p=await readBody(req);
+  requireFields(p,['status']);
+  try{
+    const status=String(p.status).toUpperCase();
+    const profile=status==='SUSPENDED'
+      ?reviewDriver(driverId,{status,remarks:p.remarks})
+      :reviewDriverStage(driverId,{
+          stage:'ADMIN',
+          status,
+          actorId:adminUser.id,
+          remarks:p.remarks||null,
+          bypassArea:Boolean(p.bypassArea),
+        });
+    if(!profile)return json(res,404,{error:'driver_not_found'});
+    writeAudit(adminUser.id,'DRIVER_FINAL_REVIEW',{
+      driverId,
+      status,
+      bypassArea:Boolean(p.bypassArea),
+    });
+    return json(res,200,{
+      profile,
+      verification:getDriverVerificationSummary(driverId),
+      approval:getDriverApprovalSummary(driverId),
+    });
+  }catch(error){return json(res,422,{error:error.message});}
+}
 if(req.method==='PUT'&&/^\/v1\/driver-profiles\/[^/]+\/online$/.test(path)){const id=path.split('/')[3];if(!requireDriver(id))return;const p=await readBody(req);requireFields(p,['online']);if(p.online&&!validPoint(p.location))throw new Error('Location required when driver goes online');const d=setDriverOnline(id,p);if(!d)return json(res,404,{error:'driver_not_found'});upsertDriver(d.id,{online:d.online,location:d.location,rating:d.rating,approved:d.approved});return json(res,200,d);}if(req.method==='GET'&&path==='/v1/driver/requests'){
   if(!driverUser)return json(res,401,{error:'driver_auth_required'});
   if(!driverUser.approved||driverUser.suspended||!driverUser.online||!validPoint(driverUser.location)){
@@ -647,7 +819,75 @@ if(req.method==='POST'&&path==='/v1/admin/promoter-earnings/release'){if(!requir
 
 if(req.method==='GET'&&path==='/v1/admin/dashboard'){if(!requireAdmin('dashboard.read'))return;const bookings=listAllBookings(),drivers=listAllDriverProfiles(),runtimeDrivers=listAllRuntimeDrivers(),payments=listAllPayments(),complaints=listAllComplaints(),settlements=listAllSettlements();const activeStatuses=new Set(['SEARCHING','DRIVER_ASSIGNED','DRIVER_ARRIVING','DRIVER_ARRIVED','OTP_VERIFIED','IN_PROGRESS']);return json(res,200,{generatedAt:new Date().toISOString(),cards:{totalBookings:bookings.length,liveRides:bookings.filter(b=>activeStatuses.has(b.status)).length,completedRides:bookings.filter(b=>b.status==='COMPLETED').length,driversRegistered:drivers.length,driversOnline:runtimeDrivers.filter(d=>d.online).length,openComplaints:complaints.filter(c=>c.status!=='CLOSED').length,paymentsCaptured:payments.filter(p=>['CAPTURED','CASH_COLLECTED'].includes(p.status)).length,pendingSettlements:settlements.filter(x=>['REQUESTED','PROCESSING'].includes(x.status)).length,openSos:listSos().filter(x=>x.status!=='RESOLVED').length,openRiskEvents:listRiskEvents().filter(x=>x.status==='OPEN').length},providers:getAdminRuntimeConfig().providers,operations:getAdminRuntimeConfig().operations});}
 if(req.method==='GET'&&path==='/v1/admin/rides'){if(!requireAdmin('rides.read'))return;return json(res,200,{items:listAllBookings()});}
-if(req.method==='GET'&&path==='/v1/admin/drivers'){if(!requireAdmin('drivers.read'))return;return json(res,200,{profiles:listAllDriverProfiles(),availability:listAllRuntimeDrivers()});}
+if(req.method==='GET'&&path==='/v1/admin/drivers'){
+  if(!requireAdmin('drivers.read'))return;
+  const profiles=listAllDriverProfiles().map(profile=>{
+    const driverDocuments=listDriverDocuments(profile.id);
+    return {
+      ...profile,
+      documents:driverDocuments,
+      verification:getDriverVerificationSummary(profile.id),
+      approval:getDriverApprovalSummary(profile.id),
+      assignment:(()=>{const link=getDriverPartnerLink(profile.id);return{link,promoter:link?.promoterId?getPromoter(link.promoterId):null,areaPromoter:link?.areaPromoterId?getPromoter(link.areaPromoterId):null};})(),
+    };
+  });
+  return json(res,200,{
+    profiles,
+    availability:listAllRuntimeDrivers(),
+  });
+}
+if(req.method==='GET'&&/^\/v1\/admin\/drivers\/[^/]+$/.test(path)){
+  if(!requireAdmin('drivers.read'))return;
+  const driverId=path.split('/')[4];
+  const profile=getDriverProfile(driverId);
+  if(!profile)return json(res,404,{error:'driver_not_found'});
+  return json(res,200,{
+    profile,
+    documents:listDriverDocuments(driverId),
+    verification:getDriverVerificationSummary(driverId),
+    approval:getDriverApprovalSummary(driverId),
+    assignment:(()=>{const link=getDriverPartnerLink(driverId);return{link,promoter:link?.promoterId?getPromoter(link.promoterId):null,areaPromoter:link?.areaPromoterId?getPromoter(link.areaPromoterId):null};})(),
+    availability:getDriver(driverId),
+  });
+}
+if(req.method==='POST'&&/^\/v1\/admin\/drivers\/[^/]+\/assign-promoter$/.test(path)){
+  if(!requireAdmin('drivers.manage')&&!adminCan(adminUser,'*'))return;
+  const driverId=path.split('/')[4];
+  if(!getDriverProfile(driverId))return json(res,404,{error:'driver_not_found'});
+  const p=await readBody(req);requireFields(p,['promoterId']);
+  const promoter=getPromoter(String(p.promoterId||'').trim());
+  if(!promoter||promoter.role!=='PROMOTER'||promoter.status!=='ACTIVE')return json(res,422,{error:'active_promoter_required'});
+  const areaPromoterId=promoter.areaPromoterId||null;
+  if(areaPromoterId){const area=getPromoter(areaPromoterId);if(!area||area.role!=='AREA_PROMOTER'||area.status!=='ACTIVE')return json(res,422,{error:'promoter_area_hierarchy_invalid'});}
+  const assignment=linkDriver({promoterId:promoter.id,areaPromoterId,driverId});
+  setDriverApprovalContext(driverId,{createdByType:'ADMIN_ASSIGNED',createdById:adminUser.id,promoterId:promoter.id,areaPromoterId});
+  writeAudit(adminUser.id,'DRIVER_PROMOTER_ASSIGNED',{driverId,promoterId:promoter.id,areaPromoterId});
+  return json(res,200,{profile:getDriverProfile(driverId),assignment,promoter,areaPromoter:areaPromoterId?getPromoter(areaPromoterId):null,approval:getDriverApprovalSummary(driverId),verification:getDriverVerificationSummary(driverId)});
+}
+if(req.method==='POST'&&/^\/v1\/admin\/drivers\/[^/]+\/documents\/[^/]+\/review$/.test(path)){
+  if(!requireAdmin('drivers.manage')&&!adminCan(adminUser,'*'))return;
+  const parts=path.split('/');
+  const driverId=parts[4];
+  const documentId=parts[6];
+  const payload=await readBody(req);
+  requireFields(payload,['status']);
+  const document=reviewDriverDocument(
+    driverId,
+    documentId,
+    {
+      status:String(payload.status).toUpperCase(),
+      remarks:payload.remarks,
+      reviewedBy:adminUser?.id||adminUser?.username||null,
+    },
+  );
+  if(!document)return json(res,404,{error:'driver_or_document_not_found'});
+  return json(res,200,{
+    document,
+    verification:getDriverVerificationSummary(driverId),
+    approval:getDriverApprovalSummary(driverId),
+    profile:getDriverProfile(driverId),
+  });
+}
 if(req.method==='GET'&&path==='/v1/admin/payments'){if(!requireAdmin('payments.read'))return;return json(res,200,{items:listAllPayments()});}
 if(req.method==='GET'&&path==='/v1/admin/settlements'){if(!requireAdmin('settlements.read'))return;return json(res,200,{items:listAllSettlements()});}
 if(req.method==='GET'&&path==='/v1/admin/complaints'){if(!requireAdmin('complaints.read'))return;return json(res,200,{items:listAllComplaints()});}

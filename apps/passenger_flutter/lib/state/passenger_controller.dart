@@ -40,7 +40,7 @@ class PassengerController extends ChangeNotifier {
       api.token = session?.token;
 
       final response = await api.getJson(
-        '/v1/mobile/config?app=PASSENGER&version=3.15.0',
+        '/v1/mobile/config?app=PASSENGER&version=3.15.1',
       );
       config = RuntimeConfig.fromJson(
         (response['config'] ?? response).cast<String, dynamic>(),
