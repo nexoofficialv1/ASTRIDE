@@ -1,0 +1,29 @@
+ASTRIDE QUALITY GATE VERSION FIX
+
+Cause:
+The repository test accepts versions only in this pattern:
+  2.3.0+N through 2.9.0+N, or 3.x.0+N
+
+The previous value 3.13.1+314 failed because the patch component must be 0.
+
+Applied to all apps:
+  version: 3.13.0+314
+
+This package also retains the previous compile fixes:
+- AstrideColors.white
+- showRoute compatibility
+- showDrivers compatibility
+
+Termux:
+  cp ~/storage/shared/Download/ASTRIDE_QUALITY_GATE_FIX_v3.13.0_BUILD314.zip ~/ASTRIDE_MASTER/
+  cd ~/ASTRIDE_MASTER
+  unzip -o ASTRIDE_QUALITY_GATE_FIX_v3.13.0_BUILD314.zip
+  git add .
+  git commit -m "Fix mobile quality gate version format"
+  git push
+
+After Android Compile Check and Mobile Quality Gate are both green, run Signed Release:
+  App: all
+  Environment: production
+  Version: 3.13.0
+  Build number: 314
