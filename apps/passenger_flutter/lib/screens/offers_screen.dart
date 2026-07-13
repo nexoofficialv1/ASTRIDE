@@ -41,8 +41,8 @@ class _OffersScreenState extends State<OffersScreen> {
             future: future,
             builder: (context, snapshot) {
               if (snapshot.connectionState != ConnectionState.done) {
-                return const ListView(
-                  children: [
+                return ListView(
+                  children: const [
                     SizedBox(height: 260),
                     Center(child: CircularProgressIndicator()),
                   ],

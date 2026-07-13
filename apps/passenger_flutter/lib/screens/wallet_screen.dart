@@ -48,8 +48,8 @@ class _WalletScreenState extends State<WalletScreen> {
             future: future,
             builder: (context, snapshot) {
               if (snapshot.connectionState != ConnectionState.done) {
-                return const ListView(
-                  children: [
+                return ListView(
+                  children: const [
                     SizedBox(height: 260),
                     Center(child: CircularProgressIndicator()),
                   ],

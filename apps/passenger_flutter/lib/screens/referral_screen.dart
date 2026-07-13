@@ -57,8 +57,8 @@ class _ReferralScreenState extends State<ReferralScreen> {
             future: future,
             builder: (context, snapshot) {
               if (snapshot.connectionState != ConnectionState.done) {
-                return const ListView(
-                  children: [
+                return ListView(
+                  children: const [
                     SizedBox(height: 260),
                     Center(child: CircularProgressIndicator()),
                   ],
@@ -166,11 +166,9 @@ class _ReferralScreenState extends State<ReferralScreen> {
                           onPressed: code.isEmpty
                               ? null
                               : () async {
-                                  await SharePlus.instance.share(
-                                    ShareParams(
-                                      text:
-                                          'Join ASTRIDE with my referral code $code\n$link',
-                                    ),
+                                  // ignore: deprecated_member_use
+                                  await Share.share(
+                                    'Join ASTRIDE with my referral code $code\n$link',
                                   );
                                 },
                           icon: const Icon(Icons.share_rounded),

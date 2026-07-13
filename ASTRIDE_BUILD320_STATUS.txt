@@ -1,0 +1,17 @@
+ASTRIDE BUILD 320 — PASSENGER COMPILE FIX
+
+Fixed:
+- Non-const ListView loading states in Offers, Referral and Wallet screens.
+- Replaced unsupported SharePlus / ShareParams API with the share_plus 10.x
+  compatible Share.share call.
+- Suppressed the deprecated-member analyzer lint only for that compatible call.
+- Driver and Partner from Build 319 remain unchanged and already compile.
+- Version: 3.14.0+320
+
+Apply:
+  cp ~/storage/shared/Download/ASTRIDE_BUILD320_PASSENGER_COMPILE_FIX.zip ~/ASTRIDE_MASTER/
+  cd ~/ASTRIDE_MASTER
+  unzip -o ASTRIDE_BUILD320_PASSENGER_COMPILE_FIX.zip
+  git add .
+  git commit -m "Fix Build 320 passenger compile errors"
+  git push
