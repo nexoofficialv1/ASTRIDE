@@ -20,6 +20,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool sent = false;
   bool busy = false;
   String? error;
+  String? notice;
 
   @override
   void dispose() {
@@ -29,7 +30,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> submit() async {
-    setState(() => error = null);
+    setState(() { error = null; notice = null; });
     if (mobile.text.length != 10) {
       setState(() => error = widget.controller.t('auth.invalidMobile'));
       return;
@@ -38,7 +39,12 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!sent) {
         setState(() => busy = true);
         await widget.controller.requestOtp(mobile.text);
-        if (mounted) setState(() => sent = true);
+        if (mounted) {
+          setState(() {
+            sent = true;
+            notice = widget.controller.t('auth.otpRequested');
+          });
+        }
         return;
       }
       if (otp.text.length < 4) {
@@ -111,14 +117,54 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () => setState(() => sent = false),
-                  child: Text(widget.controller.t('auth.changeNumber')),
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  TextButton(
+                    onPressed: busy
+                        ? null
+                        : () async {
+                            setState(() {
+                              busy = true;
+                              error = null;
+                              notice = null;
+                            });
+                            try {
+                              await widget.controller.requestOtp(mobile.text);
+                              if (mounted) {
+                                setState(() => notice =
+                                    widget.controller.t('auth.otpResent'));
+                              }
+                            } catch (e) {
+                              if (mounted) setState(() => error = e.toString());
+                            } finally {
+                              if (mounted) setState(() => busy = false);
+                            }
+                          },
+                    child: Text(widget.controller.t('auth.resendOtp')),
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() {
+                      sent = false;
+                      otp.clear();
+                      notice = null;
+                    }),
+                    child: Text(widget.controller.t('auth.changeNumber')),
+                  ),
+                ],
               ),
             ],
+            if (notice != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  notice!,
+                  style: const TextStyle(
+                    color: AstrideColors.greenDark,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
             if (error != null)
               Padding(
                 padding: const EdgeInsets.only(top: 12),

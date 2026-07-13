@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+
 import '../core/partner_strings.dart';
 import '../models/partner_models.dart';
 import '../services/api_client.dart';
@@ -20,23 +21,33 @@ class PartnerController extends ChangeNotifier {
   String driverQuery = '';
   DateTimeRangeValue range = DateTimeRangeValue.month();
 
+  bool get mustChangePassword => session?.mustChangePassword == true;
   PartnerStrings get strings => PartnerStrings(languageCode);
 
   Future<void> bootstrap() async {
     languageCode = await store.readLanguage();
-    final t = await store.read();
-    if (t != null) {
-      api.token = t;
-      try {
-        final me = await api.get('/v1/partner/me');
-        session = PartnerSession(
-          token: t,
-          name: me['partner']['name'].toString(),
-          role: me['partner']['role'].toString(),
-        );
-        await refresh();
-      } catch (_) {
-        await store.clear();
+    session = await store.readSession();
+    if (session != null) {
+      api.token = session!.token;
+      if (!mustChangePassword) {
+        try {
+          final me = await api.get('/v1/partner/me');
+          final partner =
+              (me['partner'] as Map).cast<String, dynamic>();
+          session = PartnerSession(
+            token: session!.token,
+            id: (partner['id'] ?? session!.id).toString(),
+            mobile: (partner['mobile'] ?? session!.mobile).toString(),
+            name: (partner['name'] ?? session!.name).toString(),
+            role: (partner['role'] ?? session!.role).toString(),
+            mustChangePassword:
+                partner['mustChangePassword'] == true,
+          );
+          await store.writeSession(session!);
+          await refresh();
+        } catch (_) {
+          // Do not delete a valid encrypted session on temporary network failure.
+        }
       }
     }
     notifyListeners();
@@ -48,17 +59,43 @@ class PartnerController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> login(String mobile, String password) async {
+  Future<void> login(String identity, String password) async {
     await _run(() async {
-      final x = await api.post('/v1/partner/auth/login', {'mobile': mobile, 'password': password});
+      final x = await api.post('/v1/staff-auth/login', {
+        'identity': identity.trim(),
+        'password': password,
+        'expectedRole': 'PARTNER',
+      });
       session = PartnerSession.fromJson(x);
       api.token = session!.token;
-      await store.write(session!.token);
+      await store.writeSession(session!);
+      if (!mustChangePassword) await refresh();
+    });
+  }
+
+  Future<void> changePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
+    await _run(() async {
+      await api.post('/v1/staff-auth/change-password', {
+        'currentPassword': currentPassword,
+        'newPassword': newPassword,
+      });
+      session = session!.copyWith(mustChangePassword: false);
+      await store.writeSession(session!);
       await refresh();
     });
   }
 
+  Future<void> requestPasswordReset(String identity) =>
+      _run(() => api.post('/v1/staff-auth/forgot-password/request', {
+            'identity': identity.trim(),
+            'expectedRole': 'PARTNER',
+          }));
+
   Future<void> refresh({String? from, String? to}) async {
+    if (mustChangePassword) return;
     final f = from ?? range.fromIso;
     final t = to ?? range.toIso;
     final suffix = '?from=$f&to=$t';
@@ -69,7 +106,9 @@ class PartnerController extends ChangeNotifier {
     ]);
     dashboard = out[0];
     drivers = ((out[1]['items'] ?? []) as List)
-        .map((e) => DriverPerformance.fromJson((e as Map).cast<String, dynamic>()))
+        .map((e) => DriverPerformance.fromJson(
+              (e as Map).cast<String, dynamic>(),
+            ))
         .toList();
     earnings = out[2];
     notifyListeners();
@@ -90,27 +129,31 @@ class PartnerController extends ChangeNotifier {
     notifyListeners();
   }
 
-  List<DriverPerformance> get visibleDrivers {
-    return drivers.where((d) {
-      final queryOk = driverQuery.isEmpty ||
-          d.name.toLowerCase().contains(driverQuery) ||
-          d.vehicle.toLowerCase().contains(driverQuery) ||
-          d.mobile.contains(driverQuery);
-      final filterOk = switch (driverFilter) {
-        'ONLINE' => d.online,
-        'ATTENTION' => d.needsAttention,
-        'TOP' => d.topPerformer,
-        _ => true,
-      };
-      return queryOk && filterOk;
-    }).toList();
-  }
+  List<DriverPerformance> get visibleDrivers => drivers.where((d) {
+        final queryOk = driverQuery.isEmpty ||
+            d.name.toLowerCase().contains(driverQuery) ||
+            d.vehicle.toLowerCase().contains(driverQuery) ||
+            d.mobile.contains(driverQuery);
+        final filterOk = switch (driverFilter) {
+          'ONLINE' => d.online,
+          'ATTENTION' => d.needsAttention,
+          'TOP' => d.topPerformer,
+          _ => true,
+        };
+        return queryOk && filterOk;
+      }).toList();
 
   Future<void> coach(String driverId, String type, String message) =>
-      _run(() => api.post('/v1/partner/coaching', {'driverId': driverId, 'type': type, 'message': message}));
+      _run(() => api.post('/v1/partner/coaching', {
+            'driverId': driverId,
+            'type': type,
+            'message': message,
+          }));
 
   Future<void> withdraw(double amount) async {
-    await _run(() => api.post('/v1/partner/withdrawals', {'amount': amount}));
+    await _run(
+      () => api.post('/v1/partner/withdrawals', {'amount': amount}),
+    );
     await refresh();
   }
 
@@ -118,6 +161,7 @@ class PartnerController extends ChangeNotifier {
     try {
       await api.post('/v1/partner/auth/logout', {});
     } catch (_) {}
+    api.token = null;
     session = null;
     dashboard = null;
     drivers = [];
@@ -133,6 +177,7 @@ class PartnerController extends ChangeNotifier {
       await fn();
     } catch (e) {
       error = e.toString();
+      rethrow;
     } finally {
       busy = false;
       notifyListeners();
@@ -143,13 +188,23 @@ class PartnerController extends ChangeNotifier {
 class DateTimeRangeValue {
   DateTimeRangeValue(this.from, this.to);
   final DateTime from, to;
+
   factory DateTimeRangeValue.month() {
     final now = DateTime.now();
     return DateTimeRangeValue(DateTime(now.year, now.month, 1), now);
   }
+
   String get fromIso => _iso(from);
   String get toIso => _iso(to);
   String get label => '${_short(from)} – ${_short(to)}';
-  static String _iso(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-  static String _short(DateTime d) => '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+  static String _iso(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+
+  static String _short(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/'
+      '${d.month.toString().padLeft(2, '0')}/'
+      '${d.year}';
 }

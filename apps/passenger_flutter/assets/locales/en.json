@@ -96,5 +96,13 @@
   "ride.searchingNearby": "Searching nearby drivers",
   "ride.searchingBody": "We are matching you with the nearest eligible verified driver.",
   "ride.eta": "ETA",
-  "ride.distance": "Distance"
+  "ride.distance": "Distance",
+  "profile.edit": "Edit profile",
+  "profile.name": "Name",
+  "profile.passenger": "Passenger",
+  "profile.chooseLanguage": "Choose language",
+  "profile.reportIssue": "Report an issue",
+  "auth.resendOtp": "Resend OTP",
+  "auth.otpRequested": "OTP request accepted. Delivery may take a few seconds.",
+  "auth.otpResent": "A new OTP has been requested."
 }

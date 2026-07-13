@@ -1,0 +1,63 @@
+ASTRIDE ALL APPS FINAL FRONTEND — BUILD 317
+
+Passenger
+=========
+- Approved ASTRIDE map/booking UI retained
+- OTP login and secure persistent session
+- Premium profile UI
+- Local profile photo add/change
+- Name editing without logout
+- Language change without logout
+- Wallet balance and transaction screen using live backend API
+- Offers & Promotions screen using live backend API
+- Refer & Earn code/share/history/rewards using live backend API
+- Report Issue form using live support API
+- Ride History empty/loading/error/list states
+- Bottom navigation and ride flow bracket labels fixed
+- Logout confirmation
+
+Driver
+======
+- Driver ID/mobile + password login
+- Self-registration disabled
+- Mandatory first-login password change
+- Forgot-password request hook
+- Secure persistent session
+- Language fallback without raw [keys]
+- Real GPS used when going online
+
+Partner / Area Promoter
+=======================
+- Partner ID/mobile + password login
+- Admin-created account only
+- Mandatory first-login password change
+- Forgot-password request hook
+- Secure persistent session
+- Role remains backend-controlled
+- Language fallback without raw [keys]
+
+Build
+=====
+Version: 3.14.0
+Build number: 317
+
+Apply
+=====
+cp ~/storage/shared/Download/ASTRIDE_ALL_APPS_FINAL_FRONTEND_BUILD317.zip ~/ASTRIDE_MASTER/
+cd ~/ASTRIDE_MASTER
+unzip -o ASTRIDE_ALL_APPS_FINAL_FRONTEND_BUILD317.zip
+chmod +x mobile_build/scripts/*.sh
+git update-index --chmod=+x mobile_build/scripts/*.sh
+git add .
+git commit -m "Finalize ASTRIDE passenger driver and partner apps"
+git push
+
+Wait for:
+- Android Compile Check
+- Mobile Quality Gate
+
+Only after both are green run Signed Release:
+App: all
+Environment: production
+Version: 3.14.0
+Build number: 317

@@ -74,5 +74,16 @@ class PartnerStrings {
     },
   };
 
-  String t(String key) => _v[code]?[key] ?? _v['en']![key] ?? key;
+  String t(String key) {
+    final value = _v[code]?[key] ?? _v['en']?[key];
+    if (value != null && value.trim().isNotEmpty) return value;
+    final tail = key.split('.').last;
+    return tail
+        .replaceAllMapped(
+          RegExp(r'([a-z])([A-Z])'),
+          (m) => '${m.group(1)} ${m.group(2)}',
+        )
+        .replaceAll('_', ' ')
+        .trim();
+  }
 }

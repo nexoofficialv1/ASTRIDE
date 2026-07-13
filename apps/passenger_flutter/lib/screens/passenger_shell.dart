@@ -57,7 +57,7 @@ class _PassengerShellState extends State<PassengerShell> {
                 Icons.home_rounded,
                 color: AstrideColors.greenDark,
               ),
-              label: widget.controller.t('home'),
+              label: 'Home',
             ),
             NavigationDestination(
               icon: const Icon(Icons.receipt_long_outlined),
@@ -65,7 +65,7 @@ class _PassengerShellState extends State<PassengerShell> {
                 Icons.receipt_long_rounded,
                 color: AstrideColors.greenDark,
               ),
-              label: widget.controller.t('rides'),
+              label: 'Rides',
             ),
             NavigationDestination(
               icon: const Icon(Icons.person_outline_rounded),
@@ -73,7 +73,7 @@ class _PassengerShellState extends State<PassengerShell> {
                 Icons.person_rounded,
                 color: AstrideColors.greenDark,
               ),
-              label: widget.controller.t('profile'),
+              label: 'Profile',
             ),
           ],
         ),

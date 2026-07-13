@@ -21,6 +21,8 @@ class PassengerController extends ChangeNotifier {
   String? error;
   Map<String, dynamic>? activeBooking;
   String? _otpSessionId;
+  String profileName = '';
+  String? profilePhotoPath;
 
   Future<void> bootstrap() async {
     loading = true;
@@ -29,14 +31,15 @@ class PassengerController extends ChangeNotifier {
       final code = await store.language();
       if (code != null) locale = await AppLocale.load(code);
       session = await store.read();
+      profileName = (await store.profileName()) ?? '';
+      profilePhotoPath = await store.profilePhotoPath();
       api.token = session?.token;
       final response =
-          await api.getJson('/v1/mobile/config?app=PASSENGER&version=3.12.4');
+          await api.getJson('/v1/mobile/config?app=PASSENGER&version=3.14.0');
       config = RuntimeConfig.fromJson(
         (response['config'] ?? response).cast<String, dynamic>(),
       );
     } catch (e) {
-      // Keep an existing secure session even when runtime config is temporarily unavailable.
       error = e.toString();
     }
     loading = false;
@@ -145,6 +148,65 @@ class PassengerController extends ChangeNotifier {
     activeBooking = null;
     notifyListeners();
   }
+
+
+  Future<void> updateProfileName(String value) async {
+    final clean = value.trim();
+    if (clean.isEmpty) return;
+    await store.saveProfileName(clean);
+    profileName = clean;
+    notifyListeners();
+  }
+
+  Future<void> updateProfilePhotoPath(String value) async {
+    await store.saveProfilePhotoPath(value);
+    profilePhotoPath = value;
+    notifyListeners();
+  }
+
+  Future<void> changeLanguage(String code) async {
+    await store.saveLanguage(code);
+    locale = await AppLocale.load(code);
+    notifyListeners();
+  }
+
+  Future<Map<String, dynamic>> wallet() =>
+      api.getJson('/v1/passenger/wallet');
+
+  Future<Map<String, dynamic>> walletTransactions() =>
+      api.getJson('/v1/passenger/wallet/transactions');
+
+  Future<Map<String, dynamic>> referral() =>
+      api.getJson('/v1/passenger/referral');
+
+  Future<Map<String, dynamic>> referralHistory() =>
+      api.getJson('/v1/passenger/referral/history');
+
+  Future<Map<String, dynamic>> referralRewards() =>
+      api.getJson('/v1/passenger/referral/rewards');
+
+  Future<Map<String, dynamic>> applyReferral(String code) =>
+      api.postJson('/v1/passenger/referral/apply', {'code': code.trim()});
+
+  Future<Map<String, dynamic>> offers() =>
+      api.getJson('/v1/passenger/offers');
+
+  Future<Map<String, dynamic>> validateOffer(String code) =>
+      api.postJson('/v1/offers/validate-code', {'code': code.trim()});
+
+  Future<Map<String, dynamic>> submitIssue({
+    required String category,
+    required String description,
+    String? rideId,
+    String? attachmentUrl,
+  }) =>
+      api.postJson('/v1/support/issues', {
+        'category': category,
+        'description': description,
+        if (rideId != null && rideId.isNotEmpty) 'rideId': rideId,
+        if (attachmentUrl != null && attachmentUrl.isNotEmpty)
+          'attachmentUrl': attachmentUrl,
+      });
 
   Future<void> logout() async {
     await store.clear();

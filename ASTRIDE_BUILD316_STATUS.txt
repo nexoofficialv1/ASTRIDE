@@ -1,0 +1,32 @@
+ASTRIDE ALL APPS AUTH / PROFILE FRONTEND — BUILD 316
+
+Implemented:
+- Passenger remains OTP-based.
+- Driver self-registration and OTP login removed from the frontend.
+- Driver login uses Driver ID/mobile + password.
+- Partner login uses Partner ID/mobile + password.
+- Mandatory first-login password change screens.
+- Driver/Partner forgot-password request hooks.
+- Persistent encrypted sessions.
+- Language changes do not log users out.
+- Missing translations fall back to readable labels instead of [keys].
+- Driver cannot go online or accept a ride before changing the temporary password.
+- Version aligned to 3.13.0+316.
+
+Required backend endpoints:
+POST /v1/staff-auth/login
+POST /v1/staff-auth/change-password
+POST /v1/staff-auth/forgot-password/request
+POST /v1/staff-auth/forgot-password/verify
+
+Apply:
+  cp ~/storage/shared/Download/ASTRIDE_ALL_APPS_AUTH_PROFILE_FRONTEND_BUILD316.zip ~/ASTRIDE_MASTER/
+  cd ~/ASTRIDE_MASTER
+  unzip -o ASTRIDE_ALL_APPS_AUTH_PROFILE_FRONTEND_BUILD316.zip
+  git add .
+  git commit -m "Add controlled driver partner password authentication"
+  git push
+
+Run Compile Check and Mobile Quality Gate before release.
+Release version: 3.13.0
+Build number: 316

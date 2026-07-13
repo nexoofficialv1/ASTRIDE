@@ -96,5 +96,13 @@
   "ride.searchingNearby": "नज़दीकी ड्राइवर खोज रहे हैं",
   "ride.searchingBody": "हम आपको निकटतम योग्य और सत्यापित ड्राइवर से जोड़ रहे हैं।",
   "ride.eta": "पहुंचने का समय",
-  "ride.distance": "दूरी"
+  "ride.distance": "दूरी",
+  "profile.edit": "प्रोफ़ाइल संपादित करें",
+  "profile.name": "नाम",
+  "profile.passenger": "यात्री",
+  "profile.chooseLanguage": "भाषा चुनें",
+  "profile.reportIssue": "समस्या रिपोर्ट करें",
+  "auth.resendOtp": "OTP फिर भेजें",
+  "auth.otpRequested": "OTP अनुरोध स्वीकार हुआ। पहुँचने में कुछ सेकंड लग सकते हैं।",
+  "auth.otpResent": "नया OTP अनुरोध भेजा गया है।"
 }

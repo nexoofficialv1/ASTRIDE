@@ -1,10 +1,40 @@
 class PartnerSession {
-  PartnerSession({required this.token, required this.name, required this.role});
-  final String token, name, role;
-  factory PartnerSession.fromJson(Map<String, dynamic> j) => PartnerSession(
-        token: j['token'] as String,
-        name: (j['partner']?['name'] ?? 'Partner').toString(),
-        role: (j['partner']?['role'] ?? 'PROMOTER').toString(),
+  PartnerSession({
+    required this.token,
+    required this.name,
+    required this.role,
+    required this.id,
+    required this.mobile,
+    this.mustChangePassword = false,
+  });
+
+  final String token, name, role, id, mobile;
+  final bool mustChangePassword;
+
+  factory PartnerSession.fromJson(Map<String, dynamic> j) {
+    final partner =
+        ((j['partner'] ?? j['staff'] ?? j['user']) as Map? ?? const {})
+            .cast<String, dynamic>();
+    return PartnerSession(
+      token: (j['accessToken'] ?? j['token']).toString(),
+      name: (partner['name'] ?? 'Partner').toString(),
+      role: (partner['role'] ?? 'PROMOTER').toString(),
+      id: (partner['id'] ?? j['userId'] ?? '').toString(),
+      mobile: (partner['mobile'] ?? '').toString(),
+      mustChangePassword:
+          j['mustChangePassword'] == true ||
+          partner['mustChangePassword'] == true,
+    );
+  }
+
+  PartnerSession copyWith({bool? mustChangePassword}) => PartnerSession(
+        token: token,
+        name: name,
+        role: role,
+        id: id,
+        mobile: mobile,
+        mustChangePassword:
+            mustChangePassword ?? this.mustChangePassword,
       );
 }
 

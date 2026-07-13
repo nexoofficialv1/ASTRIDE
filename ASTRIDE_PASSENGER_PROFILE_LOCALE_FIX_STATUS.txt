@@ -1,0 +1,27 @@
+ASTRIDE Passenger Profile / Locale Fix — build 315
+
+Fixed:
+- Profile language change no longer logs the user out.
+- Profile name can be edited without clearing the secure login token.
+- Missing locale keys no longer appear inside square brackets.
+- Bengali, English and Hindi profile labels added.
+- OTP screen now has a Resend OTP action and delivery notice.
+- Secure persistent login remains unchanged.
+
+Important:
+OTP SMS delivery itself is controlled by the backend SMS provider. Since the OTP is
+being created and visible in provider logs, the mobile request is reaching the server.
+If SMS still does not reach the handset, backend/provider routing, DLT template or
+provider account delivery must be corrected separately.
+
+Apply:
+  cp ~/storage/shared/Download/ASTRIDE_PASSENGER_PROFILE_LOCALE_FIX_BUILD315.zip ~/ASTRIDE_MASTER/
+  cd ~/ASTRIDE_MASTER
+  unzip -o ASTRIDE_PASSENGER_PROFILE_LOCALE_FIX_BUILD315.zip
+  git add .
+  git commit -m "Fix passenger profile logout locale labels and OTP resend"
+  git push
+
+After Compile Check and Quality Gate are green, build Passenger or all apps with:
+  Version: 3.13.0
+  Build number: 315
