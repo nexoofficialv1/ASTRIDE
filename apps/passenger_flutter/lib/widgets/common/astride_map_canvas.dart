@@ -16,6 +16,8 @@ class AstrideMapCanvas extends StatelessWidget {
     this.routePoints = const [],
     this.onTap,
     this.interactive = true,
+    this.showRoute = true,
+    this.showDrivers = false,
   });
 
   final MapController? controller;
@@ -27,6 +29,9 @@ class AstrideMapCanvas extends StatelessWidget {
   final List<LatLng> routePoints;
   final void Function(LatLng point)? onTap;
   final bool interactive;
+  /// Backwards-compatible flags used by existing ride-status screens.
+  final bool showRoute;
+  final bool showDrivers;
 
   @override
   Widget build(BuildContext context) {
@@ -82,7 +87,7 @@ class AstrideMapCanvas extends StatelessWidget {
           userAgentPackageName: 'in.astride.passenger',
           maxNativeZoom: 19,
         ),
-        if (routePoints.length >= 2)
+        if (showRoute && routePoints.length >= 2)
           PolylineLayer(
             polylines: [
               Polyline(

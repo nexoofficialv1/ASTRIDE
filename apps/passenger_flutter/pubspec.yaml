@@ -1,7 +1,7 @@
 name: astride_passenger
 description: ASTRIDE production passenger mobile application
 publish_to: none
-version: 3.13.0+313
+version: 3.13.1+314
 environment:
   sdk: ">=3.4.0 <4.0.0"
 dependencies:

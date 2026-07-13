@@ -8,6 +8,7 @@ abstract final class AstrideColors {
   static const orange = Color(0xFFFF7A00);
   static const background = Color(0xFFF4F7FB);
   static const surface = Colors.white;
+  static const white = Colors.white;
   static const text = Color(0xFF17233C);
   static const muted = Color(0xFF6F788A);
   static const border = Color(0xFFE3E8F1);

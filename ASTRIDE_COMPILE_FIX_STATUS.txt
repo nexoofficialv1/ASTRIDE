@@ -1,0 +1,19 @@
+ASTRIDE COMPILE FIX v3.13.1
+
+Fixes the exact GitHub Analyze errors:
+1. AstrideColors.white undefined
+2. AstrideMapCanvas showRoute parameter undefined
+3. AstrideMapCanvas showDrivers parameter undefined
+
+Partner already compiled successfully; its version is only aligned to 3.13.1+314.
+
+Apply in Termux:
+  cp ~/storage/shared/Download/ASTRIDE_COMPILE_FIX_v3.13.1.zip ~/ASTRIDE_MASTER/
+  cd ~/ASTRIDE_MASTER
+  unzip -o ASTRIDE_COMPILE_FIX_v3.13.1.zip
+  git add .
+  git commit -m "Fix passenger and driver compile errors"
+  git push
+
+Then wait for Android Compile Check. Do not run Signed Release until
+passenger_flutter, driver_flutter and partner_flutter are all green.
