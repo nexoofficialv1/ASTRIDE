@@ -213,7 +213,7 @@ class _BalanceTile extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(13),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(.12),
+          color: Colors.white.withValues(alpha: .12),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(

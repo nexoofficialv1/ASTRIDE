@@ -100,8 +100,8 @@ class AstrideMapCanvas extends StatelessWidget {
             ],
           ),
         MarkerLayer(markers: markers),
-        const RichAttributionWidget(
-          attributions: [
+        RichAttributionWidget(
+          attributions: const [
             TextSourceAttribution('OpenStreetMap contributors'),
           ],
         ),
@@ -130,7 +130,7 @@ class _MapPin extends StatelessWidget {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: color.withOpacity(.18),
+                color: color.withValues(alpha: .18),
                 shape: BoxShape.circle,
               ),
             ),

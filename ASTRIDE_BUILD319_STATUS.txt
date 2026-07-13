@@ -1,0 +1,23 @@
+ASTRIDE BUILD 319 — MAP DEPENDENCY / ANALYZE FIX
+
+Fixed:
+- Added flutter_map dependency to Passenger and Driver apps.
+- Added latlong2 dependency to Passenger and Driver apps.
+- Resolved undefined FlutterMap, MapOptions, Marker, TileLayer,
+  PolylineLayer, MarkerLayer, RichAttributionWidget and LatLng symbols.
+- Converted all remaining deprecated Color.withOpacity calls to
+  Color.withValues(alpha: ...), because CI treats analyzer infos as failure.
+- Updated all app build numbers to 3.14.0+319.
+
+Apply:
+  cp ~/storage/shared/Download/ASTRIDE_BUILD319_MAP_DEPENDENCY_FIX.zip ~/ASTRIDE_MASTER/
+  cd ~/ASTRIDE_MASTER
+  unzip -o ASTRIDE_BUILD319_MAP_DEPENDENCY_FIX.zip
+  git add .
+  git commit -m "Fix Build 319 map dependencies and analyzer issues"
+  git push
+
+Then check Android Compile Check for:
+- passenger_flutter
+- driver_flutter
+- partner_flutter

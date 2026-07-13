@@ -101,8 +101,8 @@ class _AstrideHomeScreenState extends State<AstrideHomeScreen> {
                     begin: Alignment.topCenter,
                     end: Alignment.center,
                     colors: [
-                      Colors.white.withOpacity(.95),
-                      Colors.white.withOpacity(.02),
+                      Colors.white.withValues(alpha: .95),
+                      Colors.white.withValues(alpha: .02),
                     ],
                     stops: const [0, .25],
                   ),
