@@ -1,0 +1,32 @@
+ASTRIDE BUILD 322 — NESTED SCRIPT PERMISSION FIX
+
+Root cause:
+The release workflow correctly called build_android.sh through Bash, but
+build_android.sh then executed inject_maps_key.sh directly. GitHub did not
+preserve that nested script's executable bit, so all three release builds failed
+with:
+  Permission denied
+  Exit code 126
+
+Fix:
+Every nested repository shell-script invocation now uses explicit Bash, including:
+  bash "$ROOT/mobile_build/scripts/bootstrap_mobile.sh" "$APP"
+  bash "$ROOT/mobile_build/scripts/inject_maps_key.sh" "$APP"
+  bash "$ROOT/mobile_build/scripts/inject_firebase.sh" "$APP"
+
+Version:
+  3.14.0+322
+
+Apply:
+  cp ~/storage/shared/Download/ASTRIDE_BUILD322_NESTED_SCRIPT_PERMISSION_FIX.zip ~/ASTRIDE_MASTER/
+  cd ~/ASTRIDE_MASTER
+  unzip -o ASTRIDE_BUILD322_NESTED_SCRIPT_PERMISSION_FIX.zip
+  git add .
+  git commit -m "Fix Build 322 nested script permissions"
+  git push
+
+After Android Compile Check and Mobile Quality Gate are green, run Signed Release:
+  App: all
+  Environment: production
+  Version: 3.14.0
+  Build number: 322
