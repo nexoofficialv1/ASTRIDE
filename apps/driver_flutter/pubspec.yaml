@@ -1,10 +1,11 @@
 name: astride_driver
 description: ASTRIDE production driver mobile application
 publish_to: none
-version: 3.14.0+322
+version: 3.15.0+324
 environment:
   sdk: ">=3.4.0 <4.0.0"
 dependencies:
+  image_picker: ^1.1.2
   latlong2: ^0.9.1
   flutter_map: ^7.0.2
   flutter:

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -9,15 +11,20 @@ import '../services/session_store.dart';
 
 class DriverController extends ChangeNotifier {
   DriverController(this.api, this.store);
+
   final ApiClient api;
   final SessionStore store;
 
   AppLocale? locale;
   Session? session;
   RuntimeConfig config = RuntimeConfig.fallback;
+  Map<String, dynamic> profile = {};
+  List<Map<String, dynamic>> documents = [];
+
   bool loading = true;
   bool online = false;
   bool busy = false;
+  String? error;
   String approval = 'PENDING';
   String onboardingStep = 'PROFILE';
   Map<String, dynamic>? request;
@@ -25,63 +32,131 @@ class DriverController extends ChangeNotifier {
   double walletBalance = 0;
   double todayEarnings = 0;
 
+  Timer? _requestPoller;
+  final Set<String> _rejectedRequestIds = <String>{};
+
   bool get mustChangePassword => session?.mustChangePassword == true;
   String t(String key) => locale?.t(key) ?? key;
 
   Future<void> bootstrap() async {
+    loading = true;
+    notifyListeners();
+
     final code = await store.language();
-    if (code != null) locale = await AppLocale.load(code);
+    if (code != null) {
+      locale = await AppLocale.load(code);
+    }
+
     session = await store.read();
     api.token = session?.token;
+
     try {
-      final response =
-          await api.getJson('/v1/mobile/config?app=DRIVER&version=3.14.0');
+      final response = await api.getJson(
+        '/v1/mobile/config?app=DRIVER&version=3.15.0',
+      );
       config = RuntimeConfig.fromJson(
         (response['config'] ?? response).cast<String, dynamic>(),
       );
-      if (session != null && !mustChangePassword) await refreshDriver();
     } catch (_) {
-      // Keep the encrypted session during temporary network problems.
+      // Runtime config failure must not delete a valid encrypted session.
     }
+
+    if (session != null) {
+      try {
+        await _migrateLinkedIdentity();
+        if (!mustChangePassword) {
+          await refreshDriver();
+        }
+      } catch (e) {
+        error = e.toString();
+      }
+    }
+
     loading = false;
     notifyListeners();
+  }
+
+  Future<void> _migrateLinkedIdentity() async {
+    final response = await api.getJson('/v1/staff-auth/me');
+    final staff =
+        ((response['staff'] ?? const {}) as Map).cast<String, dynamic>();
+    final linked = '${staff['linkedEntityId'] ?? ''}';
+
+    if (linked.isEmpty) {
+      throw ApiException('Driver profile is not linked to this account.');
+    }
+
+    session = session!.copyWith(
+      userId: linked,
+      staffId: '${staff['id'] ?? session!.staffId}',
+      mobile: '${staff['mobile'] ?? session!.mobile}',
+      role: '${staff['role'] ?? 'DRIVER'}',
+      mustChangePassword: staff['mustChangePassword'] == true,
+    );
+    await store.save(session!);
   }
 
   Future<void> language(String code) async {
     await store.saveLanguage(code);
     locale = await AppLocale.load(code);
     notifyListeners();
+
+    if (session != null && !mustChangePassword) {
+      try {
+        await updateProfile({'preferredLanguage': code});
+      } catch (_) {}
+    }
   }
 
-  Future<void> loginWithPassword(String identity, String password) async {
+  Future<void> loginWithPassword(
+    String identity,
+    String password,
+  ) async {
     busy = true;
+    error = null;
     notifyListeners();
+
     try {
       final response = await api.postJson('/v1/staff-auth/login', {
         'identity': identity.trim(),
         'password': password,
         'expectedRole': 'DRIVER',
       });
+
       final staff =
           ((response['staff'] ?? response['user']) as Map? ?? const {})
               .cast<String, dynamic>();
       final token =
           (response['accessToken'] ?? response['token']).toString();
+      final driverId = '${staff['linkedEntityId'] ?? ''}';
+
       if (token.isEmpty || token == 'null') {
         throw ApiException('Login token was not returned.');
       }
+      if (driverId.isEmpty) {
+        throw ApiException('Driver profile is not linked to this account.');
+      }
+
       session = Session(
-        userId: (staff['id'] ?? response['userId']).toString(),
+        userId: driverId,
+        staffId: '${staff['id'] ?? ''}',
         token: token,
-        mobile: (staff['mobile'] ?? identity).toString(),
-        role: (staff['role'] ?? 'DRIVER').toString(),
+        mobile: '${staff['mobile'] ?? identity}',
+        role: '${staff['role'] ?? 'DRIVER'}',
         mustChangePassword:
             response['mustChangePassword'] == true ||
             staff['mustChangePassword'] == true,
       );
+
       api.token = token;
       await store.save(session!);
-      if (!mustChangePassword) await refreshDriver();
+
+      if (!mustChangePassword) {
+        await refreshDriver();
+      }
+    } catch (e) {
+      error = e.toString();
+      rethrow;
     } finally {
       busy = false;
       notifyListeners();
@@ -93,15 +168,21 @@ class DriverController extends ChangeNotifier {
     String newPassword,
   ) async {
     busy = true;
+    error = null;
     notifyListeners();
+
     try {
       await api.postJson('/v1/staff-auth/change-password', {
         'currentPassword': currentPassword,
         'newPassword': newPassword,
       });
+
       session = session!.copyWith(mustChangePassword: false);
       await store.save(session!);
       await refreshDriver();
+    } catch (e) {
+      error = e.toString();
+      rethrow;
     } finally {
       busy = false;
       notifyListeners();
@@ -117,11 +198,13 @@ class DriverController extends ChangeNotifier {
 
   Future<void> resetPassword({
     required String identity,
+    required String challengeId,
     required String code,
     required String newPassword,
   }) async {
     await api.postJson('/v1/staff-auth/forgot-password/verify', {
       'identity': identity.trim(),
+      'challengeId': challengeId.trim(),
       'code': code.trim(),
       'newPassword': newPassword,
       'expectedRole': 'DRIVER',
@@ -130,49 +213,205 @@ class DriverController extends ChangeNotifier {
 
   Future<void> refreshDriver() async {
     if (session == null) return;
-    final response =
-        await api.getJson('/v1/driver-profiles/${session!.userId}');
+
+    final output = await Future.wait([
+      api.getJson('/v1/driver-profiles/${session!.userId}'),
+      api.getJson(
+        '/v1/driver-profiles/${session!.userId}/documents',
+      ),
+    ]);
+    profile = Map<String, dynamic>.from(output[0]);
+    documents = ((output[1]['items'] ?? const []) as List)
+        .whereType<Map>()
+        .map((item) => item.cast<String, dynamic>())
+        .toList();
     approval =
-        (response['status'] ?? response['approvalStatus'] ?? approval)
-            .toString();
-    onboardingStep =
-        (response['onboardingStep'] ?? onboardingStep).toString();
-    walletBalance =
-        double.tryParse('${response['walletBalance'] ?? walletBalance}') ??
-            walletBalance;
-    todayEarnings =
-        double.tryParse('${response['todayEarnings'] ?? todayEarnings}') ??
-            todayEarnings;
+        '${profile['status'] ?? profile['approvalStatus'] ?? 'PENDING'}';
+    onboardingStep = '${profile['onboardingStep'] ?? 'PROFILE'}';
+    online = profile['online'] == true;
+    if (online && approval == 'APPROVED' && activeRide == null) {
+      _startRequestPolling();
+    } else {
+      _stopRequestPolling();
+    }
+
     notifyListeners();
   }
 
   Future<void> saveProfile(Map<String, dynamic> data) async {
-    await api.patchJson('/v1/driver-profiles/${session!.userId}', data);
-    onboardingStep = 'DOCUMENTS';
+    busy = true;
+    error = null;
+    notifyListeners();
+
+    try {
+      final response = await api.patchJson(
+        '/v1/driver-profiles/${session!.userId}',
+        {
+          ...data,
+          'onboardingStep': 'DOCUMENTS',
+        },
+      );
+      profile = Map<String, dynamic>.from(response);
+      onboardingStep = 'DOCUMENTS';
+    } catch (e) {
+      error = e.toString();
+      rethrow;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateProfile(Map<String, dynamic> data) async {
+    busy = true;
+    error = null;
+    notifyListeners();
+
+    try {
+      final response = await api.patchJson(
+        '/v1/driver-profiles/${session!.userId}',
+        data,
+      );
+      profile = Map<String, dynamic>.from(response);
+      approval = '${profile['status'] ?? approval}';
+      onboardingStep =
+          '${profile['onboardingStep'] ?? onboardingStep}';
+    } catch (e) {
+      error = e.toString();
+      rethrow;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<String> uploadFile({
+    required String fileName,
+    required String mimeType,
+    required String base64,
+    required String category,
+  }) async {
+    final response = await api.postJson('/v1/uploads', {
+      'fileName': fileName,
+      'mimeType': mimeType,
+      'base64': base64,
+      'category': category,
+    });
+    final url = '${response['url'] ?? ''}';
+    if (url.isEmpty) {
+      throw ApiException('Uploaded file URL was not returned.');
+    }
+    return url;
+  }
+
+  Future<void> uploadProfilePhoto({
+    required String fileName,
+    required String mimeType,
+    required String base64,
+  }) async {
+    final url = await uploadFile(
+      fileName: fileName,
+      mimeType: mimeType,
+      base64: base64,
+      category: 'profile',
+    );
+    await updateProfile({'photoUrl': url});
+  }
+
+  Future<Map<String, dynamic>> uploadDocument({
+    required String type,
+    required String fileName,
+    required String mimeType,
+    required String base64,
+  }) async {
+    final url = await uploadFile(
+      fileName: fileName,
+      mimeType: mimeType,
+      base64: base64,
+      category: type.toLowerCase(),
+    );
+
+    final document = await api.postJson(
+      '/v1/driver-profiles/${session!.userId}/documents',
+      {
+        'type': type,
+        'fileUrl': url,
+      },
+    );
+    documents = [
+      document,
+      ...documents.where((item) => item['type'] != type),
+    ];
+
+    if (type == 'PROFILE_PHOTO') {
+      await updateProfile({'photoUrl': url});
+    }
+
+    return document;
+  }
+
+  Future<void> completeDocuments() async {
+    await updateProfile({'onboardingStep': 'REVIEW'});
+    onboardingStep = 'REVIEW';
+    approval = '${profile['status'] ?? 'DRAFT'}';
     notifyListeners();
   }
 
-  Future<void> submitDocuments(Map<String, dynamic> data) async {
-    await api.postJson(
-      '/v1/driver-profiles/${session!.userId}/documents',
-      data,
+  void _startRequestPolling() {
+    _requestPoller?.cancel();
+    pollRequests();
+    _requestPoller = Timer.periodic(
+      const Duration(seconds: 8),
+      (_) => pollRequests(),
     );
-    onboardingStep = 'REVIEW';
-    approval = 'PENDING';
-    notifyListeners();
+  }
+
+  void _stopRequestPolling() {
+    _requestPoller?.cancel();
+    _requestPoller = null;
+    request = null;
+  }
+
+  Future<void> pollRequests() async {
+    if (!online ||
+        approval != 'APPROVED' ||
+        activeRide != null ||
+        session == null) {
+      return;
+    }
+
+    try {
+      final response = await api.getJson('/v1/driver/requests');
+      final items = ((response['items'] ?? const []) as List)
+          .whereType<Map>()
+          .map((item) => item.cast<String, dynamic>())
+          .where(
+            (item) =>
+                !_rejectedRequestIds.contains('${item['id']}'),
+          )
+          .toList();
+
+      request = items.isEmpty ? null : items.first;
+      notifyListeners();
+    } catch (_) {
+      // Polling failure must not log the driver out.
+    }
   }
 
   Future<void> setOnline(bool value) async {
     if (mustChangePassword) {
       throw StateError('Change your temporary password first.');
     }
-    if (approval != 'APPROVED') return;
+    if (approval != 'APPROVED') {
+      throw StateError('Driver approval is still pending.');
+    }
 
     Map<String, dynamic>? location;
     if (value) {
       if (!await Geolocator.isLocationServiceEnabled()) {
         throw StateError('Please turn on location services.');
       }
+
       var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
@@ -181,24 +420,38 @@ class DriverController extends ChangeNotifier {
           permission == LocationPermission.deniedForever) {
         throw StateError('Location permission is required.');
       }
-      final p = await Geolocator.getCurrentPosition(
+
+      final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
           timeLimit: Duration(seconds: 15),
         ),
       );
       location = {
-        'lat': p.latitude,
-        'lng': p.longitude,
-        'accuracy': p.accuracy,
+        'lat': position.latitude,
+        'lng': position.longitude,
+        'accuracy': position.accuracy,
       };
     }
 
-    await api.putJson('/v1/driver-profiles/${session!.userId}/online', {
-      'online': value,
-      'location': location,
-    });
-    online = value;
+    final response = await api.putJson(
+      '/v1/driver-profiles/${session!.userId}/online',
+      {
+        'online': value,
+        'location': location,
+      },
+    );
+
+    online = response['online'] == true;
+    profile = {
+      ...profile,
+      ...response,
+    };
+    if (online) {
+      _startRequestPolling();
+    } else {
+      _stopRequestPolling();
+    }
     notifyListeners();
   }
 
@@ -207,45 +460,96 @@ class DriverController extends ChangeNotifier {
       throw StateError('Change your temporary password first.');
     }
     if (request == null) return;
-    final bookingId = request!['id'].toString();
-    await api.postJson('/v1/bookings/$bookingId/assign', {
-      'driverId': session!.userId,
-    });
-    activeRide = Map<String, dynamic>.from(request!);
-    activeRide!['status'] = 'DRIVER_ASSIGNED';
+
+    final bookingId = '${request!['id']}';
+    final response = await api.postJson(
+      '/v1/bookings/$bookingId/accept',
+      const {},
+    );
+    activeRide = ((response['booking'] ?? response) as Map)
+        .cast<String, dynamic>();
     request = null;
+    _requestPoller?.cancel();
+    _requestPoller = null;
     notifyListeners();
   }
 
   void rejectRequest() {
+    final id = '${request?['id'] ?? ''}';
+    if (id.isNotEmpty) _rejectedRequestIds.add(id);
     request = null;
     notifyListeners();
   }
 
-  Future<void> updateRideStatus(String status, {String? otp}) async {
+  Future<void> updateRideStatus(
+    String status, {
+    String? otp,
+  }) async {
     if (activeRide == null) return;
-    final bookingId = activeRide!['id'];
-    await api.postJson('/v1/bookings/$bookingId/status', {
-      'status': status,
-      if (otp != null) 'otp': otp,
-    });
-    activeRide!['status'] = status;
-    if (status == 'COMPLETED') activeRide = null;
+
+    final bookingId = '${activeRide!['id']}';
+    Map<String, dynamic> response;
+
+    if (status == 'IN_PROGRESS') {
+      if (otp == null || otp.trim().length < 4) {
+        throw ApiException('Enter the passenger ride OTP.');
+      }
+
+      await api.postJson(
+        '/v1/bookings/$bookingId/transition',
+        {
+          'status': 'OTP_VERIFIED',
+          'otp': otp.trim(),
+        },
+      );
+      response = await api.postJson(
+        '/v1/bookings/$bookingId/transition',
+        {'status': 'IN_PROGRESS'},
+      );
+    } else {
+      response = await api.postJson(
+        '/v1/bookings/$bookingId/transition',
+        {'status': status},
+      );
+    }
+
+    activeRide = Map<String, dynamic>.from(response);
+    if (status == 'COMPLETED') {
+      activeRide = null;
+      if (online) _startRequestPolling();
+    }
     notifyListeners();
   }
 
   Future<void> requestSettlement(double amount) async {
     await api.postJson(
       '/v1/driver-profiles/${session!.userId}/settlements',
-      {'amountPaise': (amount * 100).round()},
+      {
+        'amountPaise': (amount * 100).round(),
+      },
     );
   }
 
   Future<void> logout() async {
+    try {
+      await api.postJson('/v1/staff-auth/logout', const {});
+    } catch (_) {}
+
+    _stopRequestPolling();
     await store.clear();
     api.token = null;
     session = null;
+    profile = {};
+    documents = [];
     online = false;
+    request = null;
+    activeRide = null;
     notifyListeners();
   }
+  @override
+  void dispose() {
+    _requestPoller?.cancel();
+    super.dispose();
+  }
+
 }

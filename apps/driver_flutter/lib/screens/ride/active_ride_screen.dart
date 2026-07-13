@@ -55,7 +55,17 @@ class _ActiveRideScreenState extends State<ActiveRideScreen> {
               ]),
               const SizedBox(height: 14),
               if (status == 'DRIVER_ASSIGNED') ...[
-                FilledButton.icon(onPressed: () => c.updateRideStatus('DRIVER_ARRIVED'), icon: const Icon(Icons.location_on_outlined), label: Text(c.t('arrivedAtPickup'))),
+                FilledButton.icon(
+                  onPressed: () => c.updateRideStatus('DRIVER_ARRIVING'),
+                  icon: const Icon(Icons.navigation_rounded),
+                  label: const Text('Start navigation to pickup'),
+                ),
+              ] else if (status == 'DRIVER_ARRIVING') ...[
+                FilledButton.icon(
+                  onPressed: () => c.updateRideStatus('DRIVER_ARRIVED'),
+                  icon: const Icon(Icons.location_on_outlined),
+                  label: Text(c.t('arrivedAtPickup')),
+                ),
               ] else if (status == 'DRIVER_ARRIVED') ...[
                 Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: const Color(0xFFFFF7E8), borderRadius: BorderRadius.circular(16)), child: Row(children: [const Icon(Icons.timer_outlined, color: AstrideColors.orange), const SizedBox(width: 10), Expanded(child: Text('${c.t('freeWaiting')} 03:00', style: const TextStyle(fontWeight: FontWeight.w800))), Text(c.t('waitingChargeAfter'), style: const TextStyle(fontSize: 11, color: AstrideColors.muted))])),
                 const SizedBox(height: 12),
@@ -77,6 +87,7 @@ class _ActiveRideScreenState extends State<ActiveRideScreen> {
   static String _statusKey(String status) {
     switch (status) {
       case 'DRIVER_ASSIGNED': return 'navigateToPickup';
+      case 'DRIVER_ARRIVING': return 'navigateToPickup';
       case 'DRIVER_ARRIVED': return 'waitingForPassenger';
       case 'IN_PROGRESS': return 'rideInProgress';
       default: return 'activeRide';

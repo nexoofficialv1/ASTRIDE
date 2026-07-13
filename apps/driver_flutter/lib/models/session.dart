@@ -3,23 +3,37 @@ class Session {
     required this.userId,
     required this.token,
     required this.mobile,
+    this.staffId = '',
     this.mustChangePassword = false,
     this.role = 'DRIVER',
   });
 
+  /// Linked driver profile id (drv_...), never the staff account id.
   final String userId;
+  final String staffId;
   final String token;
   final String mobile;
   final bool mustChangePassword;
   final String role;
 
-  Map<String, String> get authHeaders => {'authorization': 'Bearer $token'};
+  Map<String, String> get authHeaders => {
+        'authorization': 'Bearer $token',
+      };
 
-  Session copyWith({bool? mustChangePassword}) => Session(
-        userId: userId,
+  Session copyWith({
+    String? userId,
+    String? staffId,
+    String? mobile,
+    bool? mustChangePassword,
+    String? role,
+  }) =>
+      Session(
+        userId: userId ?? this.userId,
+        staffId: staffId ?? this.staffId,
         token: token,
-        mobile: mobile,
-        role: role,
-        mustChangePassword: mustChangePassword ?? this.mustChangePassword,
+        mobile: mobile ?? this.mobile,
+        role: role ?? this.role,
+        mustChangePassword:
+            mustChangePassword ?? this.mustChangePassword,
       );
 }

@@ -1,0 +1,95 @@
+ASTRIDE FINAL MARKET TEST CANDIDATE — v3.15.0+324
+
+What this final candidate fixes
+===============================
+COMMON
+- Existing logged-in Driver/Partner sessions migrate automatically from staff_* ids
+  to their linked drv_*/promoter profile ids.
+- First-login password change keeps the current secure session valid.
+- Profile edit and language change never clear the login token.
+- Profile photos upload to the backend and remain visible after app restart/device change.
+- Camera/gallery permission is requested only when the user selects a photo/document.
+- All Android workflows invoke shell scripts through Bash.
+
+PASSENGER
+- Name and photo are now saved to the backend, not only locally.
+- Existing Wallet, Offers, Refer & Earn, Report Issue and local-place search retained.
+- Ride history reads the correct backend response.
+- Booking sends pickup/destination labels, ride type and routed distance.
+
+DRIVER
+- Fixed the root profile-save bug: staff account id is no longer used as driver id.
+- Admin-created driver profile id (linkedEntityId / drv_*) is used everywhere.
+- Profile name, address, vehicle, UPI, bank and emergency details save correctly.
+- Real profile photo upload.
+- Document photo upload now calls the real backend document API.
+- Partially uploaded documents are restored after app restart.
+- Onboarding step persists: PROFILE -> DOCUMENTS -> REVIEW.
+- Nearby ride requests are polled while the approved driver is online.
+- First driver to accept gets the booking atomically; later accepts receive conflict.
+- Ride status uses valid transitions:
+  DRIVER_ASSIGNED -> DRIVER_ARRIVING -> DRIVER_ARRIVED
+  -> OTP_VERIFIED -> IN_PROGRESS -> COMPLETED.
+- Staff logout endpoint is used.
+
+PARTNER / AREA PROMOTER
+- Fixed staff id versus linked promoter id migration.
+- Name, address, UPI, bank, emergency details and photo save to backend.
+- Role, scope, hierarchy and status remain Admin-controlled.
+- Staff logout endpoint is used.
+
+BACKEND
+- GET /v1/staff-auth/me
+- Current session preserved after mandatory password change.
+- PATCH /v1/passengers/:id
+- PATCH /v1/partner/me
+- POST /v1/uploads and public uploaded-file serving
+- Secure allow-list for driver self-editable profile fields
+- GET /v1/driver/requests
+- POST /v1/bookings/:id/accept with atomic first-accept logic
+- Uploads saved under ASTRIDE_DATA_DIR/uploads by default.
+
+Deployment order
+================
+1. Deploy ASTRIDE_FINAL_PROFILE_BACKEND_DEPLOY_v3.15.0.zip to site1 with Overwrite.
+2. Recycle the SmarterASP Application Pool.
+3. Apply this mobile source ZIP to GitHub.
+4. Wait for Android Compile Check and Mobile Quality Gate to be green.
+5. Run Signed Release:
+   App: all
+   Environment: production
+   Version: 3.15.0
+   Build number: 324
+
+Termux apply
+============
+cp ~/storage/shared/Download/ASTRIDE_FINAL_MARKET_TEST_BUILD324.zip ~/ASTRIDE_MASTER/
+cd ~/ASTRIDE_MASTER
+unzip -o ASTRIDE_FINAL_MARKET_TEST_BUILD324.zip
+chmod +x mobile_build/scripts/*.sh
+git update-index --chmod=+x mobile_build/scripts/*.sh
+git add .
+git commit -m "Finalize ASTRIDE market test build 324"
+git push
+
+Market test checklist
+=====================
+PASSENGER
+- OTP login; profile name/photo save; app restart keeps session/profile.
+- Search a local place; book a ride; see searching screen.
+- Wallet, Offers, Refer & Earn and Report Issue open.
+
+DRIVER
+- Temporary password login; mandatory password change.
+- Complete profile and upload all documents.
+- Admin approves driver.
+- Go online; receive nearby booking; accept; complete ride transitions.
+- Edit profile; restart app; verify saved data/photo.
+
+PARTNER
+- Temporary password login; mandatory password change.
+- Edit profile/photo; restart app; verify saved data.
+- View scoped drivers, coaching, earnings and settlement.
+
+This is the final market-test candidate. Production launch should follow a short real-device
+field test with at least one Passenger, one approved Driver and one Partner account.

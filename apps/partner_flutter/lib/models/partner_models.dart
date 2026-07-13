@@ -5,62 +5,98 @@ class PartnerSession {
     required this.role,
     required this.id,
     required this.mobile,
+    this.staffId = '',
     this.mustChangePassword = false,
   });
 
-  final String token, name, role, id, mobile;
+  /// Linked promoter/area-promoter id, not the staff account id.
+  final String id;
+  final String staffId;
+  final String token;
+  final String name;
+  final String role;
+  final String mobile;
   final bool mustChangePassword;
 
-  factory PartnerSession.fromJson(Map<String, dynamic> j) {
-    final partner =
-        ((j['partner'] ?? j['staff'] ?? j['user']) as Map? ?? const {})
+  factory PartnerSession.fromJson(Map<String, dynamic> json) {
+    final staff =
+        ((json['partner'] ?? json['staff'] ?? json['user']) as Map? ??
+                const {})
             .cast<String, dynamic>();
+
     return PartnerSession(
-      token: (j['accessToken'] ?? j['token']).toString(),
-      name: (partner['name'] ?? 'Partner').toString(),
-      role: (partner['role'] ?? 'PROMOTER').toString(),
-      id: (partner['id'] ?? j['userId'] ?? '').toString(),
-      mobile: (partner['mobile'] ?? '').toString(),
+      token: '${json['accessToken'] ?? json['token'] ?? ''}',
+      id: '${staff['linkedEntityId'] ?? staff['id'] ?? json['userId'] ?? ''}',
+      staffId: '${staff['id'] ?? ''}',
+      name: '${staff['name'] ?? 'Partner'}',
+      role: '${staff['role'] ?? 'PROMOTER'}',
+      mobile: '${staff['mobile'] ?? ''}',
       mustChangePassword:
-          j['mustChangePassword'] == true ||
-          partner['mustChangePassword'] == true,
+          json['mustChangePassword'] == true ||
+          staff['mustChangePassword'] == true,
     );
   }
 
-  PartnerSession copyWith({bool? mustChangePassword}) => PartnerSession(
+  PartnerSession copyWith({
+    String? id,
+    String? staffId,
+    String? name,
+    String? role,
+    String? mobile,
+    bool? mustChangePassword,
+  }) =>
+      PartnerSession(
         token: token,
-        name: name,
-        role: role,
-        id: id,
-        mobile: mobile,
+        id: id ?? this.id,
+        staffId: staffId ?? this.staffId,
+        name: name ?? this.name,
+        role: role ?? this.role,
+        mobile: mobile ?? this.mobile,
         mustChangePassword:
             mustChangePassword ?? this.mustChangePassword,
       );
 }
 
 class DriverPerformance {
-  DriverPerformance.fromJson(Map<String, dynamic> j)
-      : id = (j['driverId'] ?? j['id'] ?? '').toString(),
-        name = (j['name'] ?? 'Driver').toString(),
-        vehicle = (j['vehicleNumber'] ?? '-').toString(),
-        mobile = (j['mobile'] ?? '').toString(),
-        online = j['online'] == true,
-        requests = (j['requests'] ?? 0) as int,
-        completed = (j['completed'] ?? 0) as int,
-        rejected = (j['rejected'] ?? 0) as int,
-        cancelled = (j['cancelled'] ?? 0) as int,
-        acceptance = (j['acceptanceRate'] ?? 0).toDouble(),
-        cancellationRate = (j['cancellationRate'] ?? 0).toDouble(),
-        rating = (j['rating'] ?? 0).toDouble(),
-        onlineHours = (j['onlineHours'] ?? 0).toDouble(),
-        lateArrivals = (j['lateArrivals'] ?? 0) as int,
-        lastOnline = (j['lastOnline'] ?? '-').toString();
+  DriverPerformance.fromJson(Map<String, dynamic> json)
+      : id = '${json['driverId'] ?? json['id'] ?? ''}',
+        name = '${json['name'] ?? 'Driver'}',
+        vehicle = '${json['vehicleNumber'] ?? '-'}',
+        mobile = '${json['mobile'] ?? ''}',
+        online = json['online'] == true,
+        requests = (json['requests'] ?? 0) as int,
+        completed = (json['completed'] ?? 0) as int,
+        rejected = (json['rejected'] ?? 0) as int,
+        cancelled = (json['cancelled'] ?? 0) as int,
+        acceptance = (json['acceptanceRate'] ?? 0).toDouble(),
+        cancellationRate =
+            (json['cancellationRate'] ?? 0).toDouble(),
+        rating = (json['rating'] ?? 0).toDouble(),
+        onlineHours = (json['onlineHours'] ?? 0).toDouble(),
+        lateArrivals = (json['lateArrivals'] ?? 0) as int,
+        lastOnline = '${json['lastOnline'] ?? '-'}';
 
-  final String id, name, vehicle, mobile, lastOnline;
+  final String id;
+  final String name;
+  final String vehicle;
+  final String mobile;
+  final String lastOnline;
   final bool online;
-  final int requests, completed, rejected, cancelled, lateArrivals;
-  final double acceptance, cancellationRate, rating, onlineHours;
+  final int requests;
+  final int completed;
+  final int rejected;
+  final int cancelled;
+  final int lateArrivals;
+  final double acceptance;
+  final double cancellationRate;
+  final double rating;
+  final double onlineHours;
 
-  bool get needsAttention => acceptance < 65 || cancellationRate > 12 || rejected >= 5;
-  bool get topPerformer => completed >= 10 && acceptance >= 85 && cancellationRate <= 5;
+  bool get needsAttention =>
+      acceptance < 65 || cancellationRate > 12 || rejected >= 5;
+
+  bool get topPerformer =>
+      completed >= 10 &&
+      acceptance >= 85 &&
+      cancellationRate <= 5;
 }

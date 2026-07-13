@@ -33,7 +33,7 @@ jobs:
         env:
           FIREBASE_ANDROID_CONFIG_BASE64: ${{ inputs.app == 'passenger_flutter' && secrets.PASSENGER_FIREBASE_ANDROID_BASE64 || (inputs.app == 'driver_flutter' && secrets.DRIVER_FIREBASE_ANDROID_BASE64 || secrets.PARTNER_FIREBASE_ANDROID_BASE64) }}
           FIREBASE_REQUIRED: 'false'
-        run: mobile_build/scripts/build_test_apk.sh ${{ inputs.app }} ${{ inputs.environment }}
+        run: bash mobile_build/scripts/build_test_apk.sh ${{ inputs.app }} ${{ inputs.environment }}
       - uses: actions/upload-artifact@v4
         with:
           name: astride-${{ inputs.app }}-${{ inputs.environment }}-test-apk

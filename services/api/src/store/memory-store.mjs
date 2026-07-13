@@ -52,6 +52,31 @@ export function updateBooking(id, patch, eventType = 'BOOKING_UPDATED') {
   return structuredClone(next);
 }
 
+export function acceptBooking(id, driverId) {
+  const current = bookings.get(id);
+  if (!current) return { error: 'booking_not_found' };
+  if (
+    current.status !== 'SEARCHING' ||
+    (current.driverId && current.driverId !== driverId)
+  ) {
+    return {
+      error: 'booking_already_assigned',
+      booking: structuredClone(current),
+    };
+  }
+
+  const next = {
+    ...current,
+    driverId,
+    status: 'DRIVER_ASSIGNED',
+    acceptedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  bookings.set(id, next);
+  addRideEvent(id, 'DRIVER_ACCEPTED', { driverId });
+  return { booking: structuredClone(next) };
+}
+
 export function listBookingEvents(id) {
   return rideEvents.filter((event) => event.bookingId === id).map((value) => structuredClone(value));
 }

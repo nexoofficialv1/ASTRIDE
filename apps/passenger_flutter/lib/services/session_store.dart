@@ -38,12 +38,4 @@ class SessionStore {
         value.trim(),
       );
 
-  Future<String?> profilePhotoPath() async =>
-      (await SharedPreferences.getInstance()).getString('profilePhotoPath');
-
-  Future<void> saveProfilePhotoPath(String value) async =>
-      (await SharedPreferences.getInstance()).setString(
-        'profilePhotoPath',
-        value,
-      );
 }

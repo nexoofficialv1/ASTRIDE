@@ -7,13 +7,16 @@ import '../services/session_store.dart';
 
 class PartnerController extends ChangeNotifier {
   PartnerController(this.api, this.store);
+
   final ApiClient api;
   final SessionStore store;
 
   PartnerSession? session;
+  Map<String, dynamic> profile = {};
   Map<String, dynamic>? dashboard;
   List<DriverPerformance> drivers = [];
   Map<String, dynamic>? earnings;
+
   bool busy = false;
   String? error;
   String languageCode = 'en';
@@ -21,55 +24,89 @@ class PartnerController extends ChangeNotifier {
   String driverQuery = '';
   DateTimeRangeValue range = DateTimeRangeValue.month();
 
-  bool get mustChangePassword => session?.mustChangePassword == true;
+  bool get mustChangePassword =>
+      session?.mustChangePassword == true;
   PartnerStrings get strings => PartnerStrings(languageCode);
 
   Future<void> bootstrap() async {
     languageCode = await store.readLanguage();
     session = await store.readSession();
+
     if (session != null) {
       api.token = session!.token;
-      if (!mustChangePassword) {
-        try {
-          final me = await api.get('/v1/partner/me');
-          final partner =
-              (me['partner'] as Map).cast<String, dynamic>();
-          session = PartnerSession(
-            token: session!.token,
-            id: (partner['id'] ?? session!.id).toString(),
-            mobile: (partner['mobile'] ?? session!.mobile).toString(),
-            name: (partner['name'] ?? session!.name).toString(),
-            role: (partner['role'] ?? session!.role).toString(),
-            mustChangePassword:
-                partner['mustChangePassword'] == true,
-          );
-          await store.writeSession(session!);
+
+      try {
+        await _migrateLinkedIdentity();
+
+        if (!mustChangePassword) {
+          await refreshProfile();
           await refresh();
-        } catch (_) {
-          // Do not delete a valid encrypted session on temporary network failure.
         }
+      } catch (e) {
+        error = e.toString();
       }
     }
+
     notifyListeners();
+  }
+
+  Future<void> _migrateLinkedIdentity() async {
+    final response = await api.get('/v1/staff-auth/me');
+    final staff =
+        ((response['staff'] ?? const {}) as Map).cast<String, dynamic>();
+    final linked = '${staff['linkedEntityId'] ?? ''}';
+
+    if (linked.isEmpty) {
+      throw ApiException('Partner profile is not linked to this account.');
+    }
+
+    session = session!.copyWith(
+      id: linked,
+      staffId: '${staff['id'] ?? session!.staffId}',
+      name: '${staff['name'] ?? session!.name}',
+      mobile: '${staff['mobile'] ?? session!.mobile}',
+      role: '${staff['role'] ?? session!.role}',
+      mustChangePassword: staff['mustChangePassword'] == true,
+    );
+    await store.writeSession(session!);
   }
 
   Future<void> setLanguage(String code) async {
     languageCode = code;
     await store.writeLanguage(code);
     notifyListeners();
+
+    if (session != null && !mustChangePassword) {
+      try {
+        await updateProfile({'preferredLanguage': code});
+      } catch (_) {}
+    }
   }
 
   Future<void> login(String identity, String password) async {
     await _run(() async {
-      final x = await api.post('/v1/staff-auth/login', {
+      final response = await api.post('/v1/staff-auth/login', {
         'identity': identity.trim(),
         'password': password,
         'expectedRole': 'PARTNER',
       });
-      session = PartnerSession.fromJson(x);
+
+      session = PartnerSession.fromJson(response);
+
+      if (session!.token.isEmpty) {
+        throw ApiException('Login token was not returned.');
+      }
+      if (session!.id.isEmpty) {
+        throw ApiException('Partner profile is not linked.');
+      }
+
       api.token = session!.token;
       await store.writeSession(session!);
-      if (!mustChangePassword) await refresh();
+
+      if (!mustChangePassword) {
+        await refreshProfile();
+        await refresh();
+      }
     });
   }
 
@@ -82,39 +119,124 @@ class PartnerController extends ChangeNotifier {
         'currentPassword': currentPassword,
         'newPassword': newPassword,
       });
+
       session = session!.copyWith(mustChangePassword: false);
       await store.writeSession(session!);
+      await refreshProfile();
       await refresh();
     });
   }
 
   Future<void> requestPasswordReset(String identity) =>
-      _run(() => api.post('/v1/staff-auth/forgot-password/request', {
+      _run(
+        () => api.post(
+          '/v1/staff-auth/forgot-password/request',
+          {
             'identity': identity.trim(),
             'expectedRole': 'PARTNER',
-          }));
+          },
+        ),
+      );
 
-  Future<void> refresh({String? from, String? to}) async {
+  Future<void> refreshProfile() async {
+    final response = await api.get('/v1/partner/me');
+    profile =
+        ((response['partner'] ?? response) as Map)
+            .cast<String, dynamic>();
+
+    session = session!.copyWith(
+      id: '${profile['id'] ?? session!.id}',
+      name: '${profile['name'] ?? session!.name}',
+      mobile: '${profile['mobile'] ?? session!.mobile}',
+      role: '${profile['role'] ?? session!.role}',
+    );
+    await store.writeSession(session!);
+    notifyListeners();
+  }
+
+  Future<void> updateProfile(Map<String, dynamic> data) async {
+    await _run(() async {
+      final response = await api.patchJson(
+        '/v1/partner/me',
+        data,
+      );
+      profile =
+          ((response['partner'] ?? response) as Map)
+              .cast<String, dynamic>();
+      session = session!.copyWith(
+        name: '${profile['name'] ?? session!.name}',
+        mobile: '${profile['mobile'] ?? session!.mobile}',
+      );
+      await store.writeSession(session!);
+    });
+  }
+
+  Future<String> uploadFile({
+    required String fileName,
+    required String mimeType,
+    required String base64,
+    required String category,
+  }) async {
+    final response = await api.post('/v1/uploads', {
+      'fileName': fileName,
+      'mimeType': mimeType,
+      'base64': base64,
+      'category': category,
+    });
+    final url = '${response['url'] ?? ''}';
+    if (url.isEmpty) {
+      throw ApiException('Uploaded file URL was not returned.');
+    }
+    return url;
+  }
+
+  Future<void> uploadProfilePhoto({
+    required String fileName,
+    required String mimeType,
+    required String base64,
+  }) async {
+    final url = await uploadFile(
+      fileName: fileName,
+      mimeType: mimeType,
+      base64: base64,
+      category: 'profile',
+    );
+    await updateProfile({'photoUrl': url});
+  }
+
+  Future<void> refresh({
+    String? from,
+    String? to,
+  }) async {
     if (mustChangePassword) return;
-    final f = from ?? range.fromIso;
-    final t = to ?? range.toIso;
-    final suffix = '?from=$f&to=$t';
-    final out = await Future.wait([
+
+    final start = from ?? range.fromIso;
+    final end = to ?? range.toIso;
+    final suffix = '?from=$start&to=$end';
+
+    final output = await Future.wait([
       api.get('/v1/partner/dashboard$suffix'),
       api.get('/v1/partner/drivers$suffix'),
       api.get('/v1/partner/earnings'),
     ]);
-    dashboard = out[0];
-    drivers = ((out[1]['items'] ?? []) as List)
-        .map((e) => DriverPerformance.fromJson(
-              (e as Map).cast<String, dynamic>(),
-            ))
+
+    dashboard = output[0];
+    drivers = ((output[1]['items'] ?? const []) as List)
+        .whereType<Map>()
+        .map(
+          (item) => DriverPerformance.fromJson(
+            item.cast<String, dynamic>(),
+          ),
+        )
         .toList();
-    earnings = out[2];
+    earnings = output[2];
     notifyListeners();
   }
 
-  Future<void> setRange(DateTime from, DateTime to) async {
+  Future<void> setRange(
+    DateTime from,
+    DateTime to,
+  ) async {
     range = DateTimeRangeValue(from, to);
     await refresh();
   }
@@ -129,52 +251,69 @@ class PartnerController extends ChangeNotifier {
     notifyListeners();
   }
 
-  List<DriverPerformance> get visibleDrivers => drivers.where((d) {
+  List<DriverPerformance> get visibleDrivers =>
+      drivers.where((driver) {
         final queryOk = driverQuery.isEmpty ||
-            d.name.toLowerCase().contains(driverQuery) ||
-            d.vehicle.toLowerCase().contains(driverQuery) ||
-            d.mobile.contains(driverQuery);
+            driver.name.toLowerCase().contains(driverQuery) ||
+            driver.vehicle.toLowerCase().contains(driverQuery) ||
+            driver.mobile.contains(driverQuery);
+
         final filterOk = switch (driverFilter) {
-          'ONLINE' => d.online,
-          'ATTENTION' => d.needsAttention,
-          'TOP' => d.topPerformer,
+          'ONLINE' => driver.online,
+          'ATTENTION' => driver.needsAttention,
+          'TOP' => driver.topPerformer,
           _ => true,
         };
+
         return queryOk && filterOk;
       }).toList();
 
-  Future<void> coach(String driverId, String type, String message) =>
-      _run(() => api.post('/v1/partner/coaching', {
-            'driverId': driverId,
-            'type': type,
-            'message': message,
-          }));
+  Future<void> coach(
+    String driverId,
+    String type,
+    String message,
+  ) =>
+      _run(
+        () => api.post('/v1/partner/coaching', {
+          'driverId': driverId,
+          'type': type,
+          'message': message,
+        }),
+      );
 
   Future<void> withdraw(double amount) async {
     await _run(
-      () => api.post('/v1/partner/withdrawals', {'amount': amount}),
+      () => api.post(
+        '/v1/partner/withdrawals',
+        {'amount': amount},
+      ),
     );
     await refresh();
   }
 
   Future<void> logout() async {
     try {
-      await api.post('/v1/partner/auth/logout', {});
+      await api.post('/v1/staff-auth/logout', const {});
     } catch (_) {}
+
     api.token = null;
     session = null;
+    profile = {};
     dashboard = null;
     drivers = [];
     await store.clear();
     notifyListeners();
   }
 
-  Future<void> _run(Future<dynamic> Function() fn) async {
+  Future<void> _run(
+    Future<dynamic> Function() action,
+  ) async {
     busy = true;
     error = null;
     notifyListeners();
+
     try {
-      await fn();
+      await action();
     } catch (e) {
       error = e.toString();
       rethrow;
@@ -187,24 +326,29 @@ class PartnerController extends ChangeNotifier {
 
 class DateTimeRangeValue {
   DateTimeRangeValue(this.from, this.to);
-  final DateTime from, to;
+
+  final DateTime from;
+  final DateTime to;
 
   factory DateTimeRangeValue.month() {
     final now = DateTime.now();
-    return DateTimeRangeValue(DateTime(now.year, now.month, 1), now);
+    return DateTimeRangeValue(
+      DateTime(now.year, now.month, 1),
+      now,
+    );
   }
 
   String get fromIso => _iso(from);
   String get toIso => _iso(to);
   String get label => '${_short(from)} – ${_short(to)}';
 
-  static String _iso(DateTime d) =>
-      '${d.year.toString().padLeft(4, '0')}-'
-      '${d.month.toString().padLeft(2, '0')}-'
-      '${d.day.toString().padLeft(2, '0')}';
+  static String _iso(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-'
+      '${date.month.toString().padLeft(2, '0')}-'
+      '${date.day.toString().padLeft(2, '0')}';
 
-  static String _short(DateTime d) =>
-      '${d.day.toString().padLeft(2, '0')}/'
-      '${d.month.toString().padLeft(2, '0')}/'
-      '${d.year}';
+  static String _short(DateTime date) =>
+      '${date.day.toString().padLeft(2, '0')}/'
+      '${date.month.toString().padLeft(2, '0')}/'
+      '${date.year}';
 }

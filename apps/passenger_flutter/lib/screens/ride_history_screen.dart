@@ -31,7 +31,7 @@ class RideHistoryScreen extends StatelessWidget {
             }
 
             final items =
-                ((snapshot.data?['bookings'] ?? const []) as List)
+                ((snapshot.data?['items'] ?? const []) as List)
                     .whereType<Map>()
                     .toList();
 

@@ -9,6 +9,7 @@ class SessionStore {
   Future<void> save(Session s) async {
     await _secure.write(key: 'token', value: s.token);
     await _secure.write(key: 'userId', value: s.userId);
+    await _secure.write(key: 'staffId', value: s.staffId);
     await _secure.write(key: 'mobile', value: s.mobile);
     await _secure.write(key: 'role', value: s.role);
     await _secure.write(
@@ -21,10 +22,15 @@ class SessionStore {
     final token = await _secure.read(key: 'token');
     final userId = await _secure.read(key: 'userId');
     final mobile = await _secure.read(key: 'mobile');
-    if (token == null || userId == null || mobile == null) return null;
+
+    if (token == null || userId == null || mobile == null) {
+      return null;
+    }
+
     return Session(
       token: token,
       userId: userId,
+      staffId: await _secure.read(key: 'staffId') ?? '',
       mobile: mobile,
       role: await _secure.read(key: 'role') ?? 'DRIVER',
       mustChangePassword:
@@ -38,5 +44,8 @@ class SessionStore {
       (await SharedPreferences.getInstance()).getString('language');
 
   Future<void> saveLanguage(String value) async =>
-      (await SharedPreferences.getInstance()).setString('language', value);
+      (await SharedPreferences.getInstance()).setString(
+        'language',
+        value,
+      );
 }

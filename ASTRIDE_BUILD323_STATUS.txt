@@ -1,0 +1,55 @@
+ASTRIDE BUILD 323 — LOCAL PLACE SEARCH & REVERSE GEOCODING
+
+This is a minimal overlay on compile-green Build 322.
+
+Passenger changes
+=================
+- Local-biased destination search around the passenger/Kalna.
+- Search results sorted by distance.
+- Place name, locality/address and distance shown separately.
+- Stale search responses are ignored.
+- Search loading and clear controls.
+- Map pin now resolves to a real place/address instead of only
+  “Pinned destination”.
+- Current pickup also resolves to a local place/address.
+- Existing OSM road-following route, fare and approved UI are preserved.
+
+Backend changes
+===============
+- OSM geocoding biased around Kalna/current coordinates.
+- Country filter for India.
+- Bengali + English place names.
+- Local query expansion for Kalna, Purba Bardhaman.
+- Five-minute server cache and request timeout.
+- New endpoint:
+  GET /v1/maps/reverse?lat=...&lng=...&language=bn,en
+- Existing route endpoint remains unchanged.
+
+Build safety
+============
+- No Flutter dependency added or removed.
+- No map widget package/version changed.
+- GitHub workflow permission fixes from Build 322 retained.
+- Node syntax checks passed.
+- Dart delimiter/static structure checks passed.
+- Version: 3.14.0+323
+
+GitHub apply
+============
+cp ~/storage/shared/Download/ASTRIDE_BUILD323_LOCAL_PLACE_SEARCH_FIX.zip ~/ASTRIDE_MASTER/
+cd ~/ASTRIDE_MASTER
+unzip -o ASTRIDE_BUILD323_LOCAL_PLACE_SEARCH_FIX.zip
+git add .
+git commit -m "Add Build 323 local place search and reverse geocoding"
+git push
+
+Backend deploy
+==============
+Upload ASTRIDE_BUILD323_BACKEND_MAP_SEARCH_DEPLOY.zip to site1,
+unzip with Overwrite, then recycle Application Pool.
+
+After Compile Check and Quality Gate are green, run Signed Release:
+App: all
+Environment: production
+Version: 3.14.0
+Build number: 323

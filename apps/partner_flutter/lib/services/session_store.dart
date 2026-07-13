@@ -16,6 +16,7 @@ class SessionStore {
         'name': session.name,
         'role': session.role,
         'id': session.id,
+        'staffId': session.staffId,
         'mobile': session.mobile,
         'mustChangePassword': session.mustChangePassword,
       }),
@@ -25,24 +26,31 @@ class SessionStore {
   Future<PartnerSession?> readSession() async {
     final raw = await _secure.read(key: 'partnerSession');
     if (raw == null) return null;
-    final j = (jsonDecode(raw) as Map).cast<String, dynamic>();
+
+    final json =
+        (jsonDecode(raw) as Map).cast<String, dynamic>();
+
     return PartnerSession(
-      token: j['token'].toString(),
-      name: (j['name'] ?? 'Partner').toString(),
-      role: (j['role'] ?? 'PROMOTER').toString(),
-      id: (j['id'] ?? '').toString(),
-      mobile: (j['mobile'] ?? '').toString(),
-      mustChangePassword: j['mustChangePassword'] == true,
+      token: '${json['token'] ?? ''}',
+      name: '${json['name'] ?? 'Partner'}',
+      role: '${json['role'] ?? 'PROMOTER'}',
+      id: '${json['id'] ?? ''}',
+      staffId: '${json['staffId'] ?? ''}',
+      mobile: '${json['mobile'] ?? ''}',
+      mustChangePassword: json['mustChangePassword'] == true,
     );
   }
 
   Future<void> clear() => _secure.deleteAll();
 
   Future<String> readLanguage() async =>
-      (await SharedPreferences.getInstance()).getString('partnerLanguage') ??
+      (await SharedPreferences.getInstance())
+          .getString('partnerLanguage') ??
       'en';
 
   Future<void> writeLanguage(String code) async =>
-      (await SharedPreferences.getInstance())
-          .setString('partnerLanguage', code);
+      (await SharedPreferences.getInstance()).setString(
+        'partnerLanguage',
+        code,
+      );
 }

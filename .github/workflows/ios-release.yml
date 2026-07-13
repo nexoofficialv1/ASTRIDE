@@ -15,7 +15,7 @@ jobs:
         with:
           channel: stable
           cache: true
-      - run: mobile_build/scripts/bootstrap_mobile.sh
+      - run: bash mobile_build/scripts/bootstrap_mobile.sh
       - name: Install Apple certificate
         env:
           CERTIFICATE_P12: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
@@ -33,7 +33,7 @@ jobs:
         run: |
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           echo "$PROFILE_B64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/astride.mobileprovision
-      - run: mobile_build/scripts/build_ios.sh ${{ inputs.app }}
+      - run: bash mobile_build/scripts/build_ios.sh ${{ inputs.app }}
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.app }}-ios-release

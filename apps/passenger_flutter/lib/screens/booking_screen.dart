@@ -23,17 +23,22 @@ class _BookingScreenState extends State<BookingScreen> {
   final MapController map = MapController();
   final pickupText = TextEditingController(text: 'Current location');
   final destinationText = TextEditingController();
+  final destinationFocus = FocusNode();
 
   LatLng? pickup;
   LatLng? destination;
   List<LatLng> route = [];
   List<Map<String, dynamic>> suggestions = [];
   Timer? debounce;
+  int searchGeneration = 0;
+  bool searchingPlaces = false;
+  bool resolvingPin = false;
   String rideType = 'FULL_TOTO';
   String paymentPreference = 'BOTH';
   bool safeRide = false;
   bool busy = false;
   Map<String, dynamic>? quote;
+  double? routeDistanceKm;
   String? error;
 
   @override
@@ -47,6 +52,7 @@ class _BookingScreenState extends State<BookingScreen> {
     debounce?.cancel();
     pickupText.dispose();
     destinationText.dispose();
+    destinationFocus.dispose();
     super.dispose();
   }
 
@@ -68,35 +74,145 @@ class _BookingScreenState extends State<BookingScreen> {
       pickup = LatLng(p.latitude, p.longitude);
       if (mounted) setState(() {});
       map.move(pickup!, 16);
+      await _reversePoint(pickup!, forPickup: true);
     } catch (_) {}
   }
 
   void _search(String query) {
     debounce?.cancel();
-    if (query.trim().length < 3) {
-      setState(() => suggestions = []);
+    final clean = query.trim();
+    final generation = ++searchGeneration;
+
+    if (clean.length < 2) {
+      setState(() {
+        suggestions = [];
+        searchingPlaces = false;
+      });
       return;
     }
-    debounce = Timer(const Duration(milliseconds: 420), () async {
+
+    setState(() => searchingPlaces = true);
+
+    debounce = Timer(const Duration(milliseconds: 560), () async {
       try {
-        final data = await widget.controller.api.getJson(
-          '/v1/maps/geocode?q=${Uri.encodeQueryComponent(query.trim())}',
-        );
+        final center = pickup ?? const LatLng(23.2196, 88.3628);
+        final path = '/v1/maps/geocode'
+            '?q=${Uri.encodeQueryComponent(clean)}'
+            '&lat=${center.latitude}'
+            '&lng=${center.longitude}'
+            '&limit=8'
+            '&language=bn,en';
+
+        final data = await widget.controller.api.getJson(path);
         final result = data['result'] is Map
             ? (data['result'] as Map).cast<String, dynamic>()
             : data;
         final raw = result['results'];
-        if (!mounted) return;
+
+        if (!mounted || generation != searchGeneration) return;
+
+        final items = raw is List
+            ? raw
+                .whereType<Map>()
+                .map((item) => item.cast<String, dynamic>())
+                .where((item) => _pointFrom(item) != null)
+                .toList()
+            : <Map<String, dynamic>>[];
+
+        items.sort((a, b) {
+          final aDistance = _distanceFromPickup(a);
+          final bDistance = _distanceFromPickup(b);
+          return aDistance.compareTo(bDistance);
+        });
+
         setState(() {
-          suggestions = raw is List
-              ? raw.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList()
-              : [];
+          suggestions = items.take(8).toList();
+          searchingPlaces = false;
           error = null;
         });
       } catch (e) {
-        if (mounted) setState(() => error = e.toString());
+        if (!mounted || generation != searchGeneration) return;
+        setState(() {
+          searchingPlaces = false;
+          suggestions = [];
+          error = 'Place search unavailable. Please try again.';
+        });
       }
     });
+  }
+
+  String _placeTitle(Map<String, dynamic> item) {
+    final value = item['name'] ??
+        item['label'] ??
+        item['displayName'] ??
+        item['address'] ??
+        'Place';
+    return '$value'.trim();
+  }
+
+  String _placeSubtitle(Map<String, dynamic> item) {
+    final value = item['subtitle'] ??
+        item['address'] ??
+        item['displayName'] ??
+        '';
+    final text = '$value'.trim();
+    final title = _placeTitle(item);
+    if (text.toLowerCase() == title.toLowerCase()) return '';
+    return text;
+  }
+
+  double _distanceFromPickup(Map<String, dynamic> item) {
+    final supplied = double.tryParse('${item['distanceM']}');
+    if (supplied != null && supplied >= 0) return supplied;
+
+    final point = _pointFrom(item);
+    final origin = pickup;
+    if (point == null || origin == null) return double.infinity;
+
+    return const Distance().as(
+      LengthUnit.Meter,
+      origin,
+      point,
+    );
+  }
+
+  String _distanceLabel(Map<String, dynamic> item) {
+    final meters = _distanceFromPickup(item);
+    if (!meters.isFinite) return '';
+    if (meters < 1000) return '${meters.round()} m';
+    return '${(meters / 1000).toStringAsFixed(1)} km';
+  }
+
+  Future<String?> _reversePoint(
+    LatLng point, {
+    bool forPickup = false,
+  }) async {
+    try {
+      final path = '/v1/maps/reverse'
+          '?lat=${point.latitude}'
+          '&lng=${point.longitude}'
+          '&language=bn,en';
+      final data = await widget.controller.api.getJson(path);
+      final result = data['result'] is Map
+          ? (data['result'] as Map).cast<String, dynamic>()
+          : data;
+      final name = _placeTitle(result);
+
+      if (!mounted) return name;
+      setState(() {
+        if (forPickup) {
+          pickupText.text = name;
+        } else {
+          destinationText.text = name;
+        }
+      });
+      return name;
+    } catch (_) {
+      if (forPickup && mounted) {
+        setState(() => pickupText.text = 'Current location');
+      }
+      return null;
+    }
   }
 
   LatLng? _pointFrom(Map<String, dynamic> item) {
@@ -109,11 +225,16 @@ class _BookingScreenState extends State<BookingScreen> {
     final point = _pointFrom(item);
     if (point == null) return;
     destination = point;
-    destinationText.text =
-        '${item['name'] ?? item['displayName'] ?? item['address'] ?? 'Destination'}';
+    destinationText.text = _placeTitle(item);
     suggestions = [];
+    searchGeneration++;
+    destinationFocus.unfocus();
     map.move(point, 15);
-    setState(() {});
+    setState(() {
+      route = [];
+      quote = null;
+      error = null;
+    });
     await _loadRouteAndQuote();
   }
 
@@ -137,6 +258,7 @@ class _BookingScreenState extends State<BookingScreen> {
       );
       route = _parseRoute(routeResponse);
       final km = _extractDistanceKm(routeResponse);
+      routeDistanceKm = km;
 
       quote = await widget.controller.api.postJson(
         '/v1/fares/quote-v3',
@@ -226,6 +348,10 @@ class _BookingScreenState extends State<BookingScreen> {
         {'lat': pickup!.latitude, 'lng': pickup!.longitude},
         {'lat': destination!.latitude, 'lng': destination!.longitude},
         paymentPreference,
+        pickupAddress: pickupText.text.trim(),
+        destinationAddress: destinationText.text.trim(),
+        rideType: rideType,
+        distanceKm: routeDistanceKm,
       );
       if (!mounted) return;
       Navigator.pushReplacement(
@@ -257,12 +383,22 @@ class _BookingScreenState extends State<BookingScreen> {
               pickup: pickup,
               destination: destination,
               routePoints: route,
-              onTap: (point) {
+              onTap: (point) async {
                 destination = point;
-                destinationText.text = 'Pinned destination';
+                destinationText.text = 'Finding place name…';
                 suggestions = [];
-                setState(() {});
-                _loadRouteAndQuote();
+                searchGeneration++;
+                destinationFocus.unfocus();
+                setState(() {
+                  resolvingPin = true;
+                  route = [];
+                  quote = null;
+                  error = null;
+                });
+                await _reversePoint(point);
+                if (!mounted) return;
+                setState(() => resolvingPin = false);
+                await _loadRouteAndQuote();
               },
             ),
           ),
@@ -360,14 +496,42 @@ class _BookingScreenState extends State<BookingScreen> {
                       const SizedBox(height: 10),
                       TextField(
                         controller: destinationText,
+                        focusNode: destinationFocus,
                         onChanged: _search,
+                        textInputAction: TextInputAction.search,
                         decoration: InputDecoration(
                           prefixIcon: const Icon(
                             Icons.location_on_rounded,
                             color: AstrideColors.orange,
                           ),
                           labelText: t('destination'),
-                          hintText: 'Search Kalna, station, hospital…',
+                          hintText: 'Search local area, station, hospital…',
+                          suffixIcon: searchingPlaces || resolvingPin
+                              ? const Padding(
+                                  padding: EdgeInsets.all(14),
+                                  child: SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                )
+                              : destinationText.text.isEmpty
+                                  ? null
+                                  : IconButton(
+                                      onPressed: () {
+                                        destinationText.clear();
+                                        destination = null;
+                                        searchGeneration++;
+                                        setState(() {
+                                          suggestions = [];
+                                          route = [];
+                                          quote = null;
+                                          error = null;
+                                        });
+                                      },
+                                      icon: const Icon(Icons.close_rounded),
+                                    ),
                         ),
                       ),
                       if (suggestions.isNotEmpty)
@@ -386,17 +550,52 @@ class _BookingScreenState extends State<BookingScreen> {
                             ],
                           ),
                           child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              for (final item in suggestions.take(5))
+                              const Padding(
+                                padding: EdgeInsets.fromLTRB(16, 12, 16, 6),
+                                child: Text(
+                                  'Nearby places in and around Kalna',
+                                  style: TextStyle(
+                                    color: AstrideColors.muted,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                              for (final item in suggestions)
                                 ListTile(
-                                  leading: const Icon(
-                                    Icons.place_outlined,
-                                    color: AstrideColors.greenDark,
+                                  dense: true,
+                                  leading: const CircleAvatar(
+                                    backgroundColor:
+                                        AstrideColors.successTint,
+                                    child: Icon(
+                                      Icons.place_outlined,
+                                      color: AstrideColors.greenDark,
+                                    ),
                                   ),
                                   title: Text(
-                                    '${item['name'] ?? item['displayName'] ?? item['address'] ?? 'Place'}',
-                                    maxLines: 2,
+                                    _placeTitle(item),
+                                    maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  subtitle: _placeSubtitle(item).isEmpty
+                                      ? null
+                                      : Text(
+                                          _placeSubtitle(item),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                  trailing: Text(
+                                    _distanceLabel(item),
+                                    style: const TextStyle(
+                                      color: AstrideColors.muted,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                    ),
                                   ),
                                   onTap: () => _selectSuggestion(item),
                                 ),

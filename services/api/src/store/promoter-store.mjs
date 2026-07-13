@@ -4,6 +4,24 @@ const clone=x=>structuredClone(x),now=()=>new Date().toISOString();
 const hashPassword=(value,salt=crypto.randomBytes(16).toString('hex'))=>({salt,hash:crypto.scryptSync(String(value),salt,64).toString('hex')});
 const verifyPassword=(value,record)=>{if(!record?.salt||!record?.hash)return false;const candidate=crypto.scryptSync(String(value),record.salt,64);return crypto.timingSafeEqual(candidate,Buffer.from(record.hash,'hex'));};
 export function upsertPromoter(p){const previous=p.id?promoters.get(p.id):null;const credential=p.password?hashPassword(p.password):previous?.credential||null;const x={id:p.id||crypto.randomUUID(),role:p.role||previous?.role||'PROMOTER',status:p.status||previous?.status||'ACTIVE',areaPromoterId:p.areaPromoterId??previous?.areaPromoterId??null,mobile:p.mobile||previous?.mobile||null,name:p.name||previous?.name||'Partner',credential,...previous,...p,password:undefined,updatedAt:now()};delete x.password;promoters.set(x.id,x);return sanitize(x);}
+export function updatePromoterProfile(actorId,patch={}){
+ const actor=promoters.get(actorId);
+ if(!actor)return null;
+ const safe={};
+ for(const key of ['name','address','upiId','emergencyContact','preferredLanguage','photoUrl']){
+   if(patch[key]!==undefined)safe[key]=patch[key];
+ }
+ if(patch.bank&&typeof patch.bank==='object'){
+   safe.bank={
+     accountHolder:String(patch.bank.accountHolder||'').trim(),
+     accountNumber:String(patch.bank.accountNumber||'').trim(),
+     ifsc:String(patch.bank.ifsc||'').trim().toUpperCase(),
+   };
+ }
+ Object.assign(actor,safe,{id:actor.id,updatedAt:now()});
+ promoters.set(actor.id,actor);
+ return sanitize(actor);
+}
 export function partnerLogin({mobile,password}){const actor=[...promoters.values()].find(x=>x.mobile===mobile&&x.status==='ACTIVE');if(!actor||!verifyPassword(password,actor.credential))return null;const token=crypto.randomBytes(32).toString('hex');const session={token,actorId:actor.id,role:actor.role,expiresAt:new Date(Date.now()+12*60*60*1000).toISOString(),createdAt:now()};sessions.set(token,session);return {token,expiresAt:session.expiresAt,partner:sanitize(actor)};}
 export function authenticatePartner(header){const token=String(header||'').replace(/^Bearer\s+/i,'');const s=sessions.get(token);if(!s||new Date(s.expiresAt)<=new Date()){if(token)sessions.delete(token);return null;}const actor=promoters.get(s.actorId);return actor?sanitize(actor):null;}
 export function partnerLogout(header){const token=String(header||'').replace(/^Bearer\s+/i,'');return sessions.delete(token);}
