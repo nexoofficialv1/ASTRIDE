@@ -1,0 +1,33 @@
+ASTRIDE FINAL MARKET TEST BUILD 328 — CI COMPILE HOTFIX
+
+Build 327 is superseded for GitHub/mobile builds.
+
+Fixed
+=====
+1. Partner Flutter analyzer:
+   DropdownButtonFormField.value replaced with initialValue.
+
+2. Mobile pipeline compatibility:
+   Passenger, Driver and Partner pubspec versions changed to:
+   3.16.0+328
+   This matches the repository mobile-v23 version rule for 3.x releases.
+
+Unchanged
+=========
+- Driver under mandatory Promoter assignment
+- Promoter partial approval
+- Area Promoter approval
+- Admin final approval and Area Promoter bypass
+- Driver document verification
+- Passenger local search and road-following route
+- Backend and Admin Console logic from Build 327
+
+Deployment
+==========
+No backend redeployment is required for this compile hotfix.
+
+GitHub:
+App: all
+Environment: production
+Version: 3.16.0
+Build number: 328

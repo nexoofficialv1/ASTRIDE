@@ -128,7 +128,7 @@ class DriversScreen extends StatelessWidget {
                 TextField(controller: vehicle, textCapitalization: TextCapitalization.characters, decoration: InputDecoration(labelText: _label('Vehicle number', 'গাড়ির নম্বর', 'वाहन नंबर'))),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
-                  value: vehicleType,
+                  initialValue: vehicleType,
                   decoration: InputDecoration(labelText: _label('Vehicle type', 'গাড়ির ধরন', 'वाहन प्रकार')),
                   items: const [
                     DropdownMenuItem(value: 'TOTO', child: Text('Toto / E-rickshaw')),
