@@ -146,6 +146,13 @@ async referrals(){
 async campaigns(){const d=await api('/v1/admin/campaigns');const summary=d.summary||{};return `<div class="cards"><div class="card"><small>Total Campaigns</small><strong>${esc(summary.total||0)}</strong></div><div class="card"><small>Active</small><strong>${esc(summary.active||0)}</strong></div><div class="card"><small>Total Payout</small><strong>₹${esc(summary.totalPayout||0)}</strong></div><div class="card"><small>Redemptions</small><strong>${esc(summary.redemptions||0)}</strong></div></div><div class="grid"><div class="panel"><h3>Create Offer / Campaign</h3><div class="form-grid"><label class="field"><span>Offer Name</span><input id="campaignName" placeholder="Launch Bonus"></label><label class="field"><span>Offer Code (optional)</span><input id="campaignCode" placeholder="FIRST20"></label><label class="field"><span>Target User</span><select id="campaignTarget"><option>DRIVER</option><option>PASSENGER</option><option>PROMOTER</option><option>AREA_PROMOTER</option></select></label><label class="field"><span>Status</span><select id="campaignStatus"><option>DRAFT</option><option>SCHEDULED</option><option>ACTIVE</option></select></label><label class="field"><span>Start Date</span><input id="campaignStart" type="datetime-local"></label><label class="field"><span>End Date</span><input id="campaignEnd" type="datetime-local"></label><label class="field"><span>Reward Type</span><select id="campaignRewardType"><option>FIXED_BONUS</option><option>FLAT_DISCOUNT</option><option>PERCENT_DISCOUNT</option><option>CASHBACK</option><option>ZERO_COMMISSION</option><option>TARGET_BONUS</option><option>REFERRAL_BONUS</option></select></label><label class="field"><span>Reward Value (₹ or %)</span><input id="campaignRewardValue" type="number" step="0.01" value="0"></label><label class="field"><span>Target Count</span><input id="campaignRequiredCount" type="number" value="1"></label><label class="field"><span>Metric</span><select id="campaignMetric"><option>RIDE_COMPLETED</option><option>DRIVER_ONBOARDED</option><option>REFERRAL_COMPLETED</option><option>NIGHT_RIDE_COMPLETED</option><option>PEAK_RIDE_COMPLETED</option><option>AREA_DRIVER_ACTIVE</option></select></label><label class="field"><span>Area / Zone IDs</span><input id="campaignAreas" placeholder="zone-kalna,zone-block1"></label><label class="field"><span>Ride Types</span><input id="campaignRideTypes" placeholder="FULL_TOTO,SHARE_TOTO"></label><label class="field"><span>Maximum Payout (₹)</span><input id="campaignBudget" type="number" step="0.01" value="0"></label><label class="field"><span>Per-user Limit</span><input id="campaignUserLimit" type="number" value="1"></label></div><label class="field"><span>Terms & Conditions</span><textarea id="campaignTerms" rows="4"></textarea></label><button class="primary" id="saveCampaign">Create Campaign</button></div><div class="panel"><h3>Campaign Controls</h3><p class="muted">Dates, targeting, reward rules and maximum payout are enforced by the backend. Payouts stop automatically when the budget is exhausted.</p><label class="field"><span>Filter Target</span><select id="campaignFilter"><option value="">All</option><option>DRIVER</option><option>PASSENGER</option><option>PROMOTER</option><option>AREA_PROMOTER</option></select></label></div></div><div id="campaignTable">${campaignTable(d.items)}</div>`},
 async promoterManagement(){
   const d=await api('/v1/admin/promoters');
+  const items=d.items||[];
+  const areas=items.filter(x=>
+    x.role==='AREA_PROMOTER'&&x.status==='ACTIVE'
+  );
+  const areaOptions=areas.map(x=>
+    `<option value="${esc(x.id)}">${esc(x.name||x.id)} · ${esc(x.areaId||'No area')}</option>`
+  ).join('');
   return `
     <div class="toolbar">
       <input id="promoterSearch" placeholder="Search promoter / area / mobile">
@@ -154,13 +161,19 @@ async promoterManagement(){
         <option value="PROMOTER">PROMOTER</option>
         <option value="AREA_PROMOTER">AREA_PROMOTER</option>
       </select>
+      <select id="promoterStatusFilter">
+        <option value="">All status</option>
+        <option value="ACTIVE">ACTIVE</option>
+        <option value="SUSPENDED">SUSPENDED</option>
+        <option value="TERMINATED">TERMINATED</option>
+      </select>
       <button class="primary" id="addPromoter">＋ Add Partner</button>
     </div>
     <div id="partnerCreatePanel" class="panel creation-panel" hidden>
       <div class="panel-header">
         <div>
           <h3>Create Partner Account</h3>
-          <p class="muted">Only Admin can create Promoter and Area Promoter accounts.</p>
+          <p class="muted">Only Admin creates and assigns partner hierarchy.</p>
         </div>
         <button class="secondary" id="closePartnerForm">Close</button>
       </div>
@@ -175,7 +188,12 @@ async promoterManagement(){
           </select>
         </label>
         <label class="field"><span>Area ID</span><input id="partnerAreaId"></label>
-        <label class="field"><span>Parent Area Promoter ID</span><input id="partnerParentId"></label>
+        <label class="field" id="partnerParentField"><span>Assign under Area Promoter</span>
+          <select id="partnerParentId">
+            <option value="">Not assigned — assign later</option>
+            ${areaOptions}
+          </select>
+        </label>
         <label class="field"><span>Temporary password *</span><input id="partnerTempPassword" type="password" minlength="8"></label>
       </div>
       <div class="actions">
@@ -183,7 +201,7 @@ async promoterManagement(){
       </div>
       <pre id="partnerCreateResult" class="result-box" hidden></pre>
     </div>
-    <div id="promoterTable">${promoterTable(d.items)}</div>`;
+    <div id="promoterTable">${promoterTable(items,areas)}</div>`;
 },
 async compensation(){const c=await api('/v1/admin/config'),l=c.businessRules.lateArrival,w=c.businessRules.waiting;return `<div class="cards"><div class="card"><small>Grace period</small><strong>${esc(l.graceMinutes)} min</strong></div><div class="card"><small>Late penalty/min</small><strong>₹${esc(l.perMinutePenalty)}</strong></div><div class="card"><small>Maximum penalty</small><strong>₹${esc(l.maxPenalty)}</strong></div><div class="card"><small>Free waiting</small><strong>${esc(w.freeMinutes)} min</strong></div></div><div class="grid"><div class="panel"><h3>Late-arrival policy</h3>${toggle('lateArrivalEnabled',l.enabled)}<div class="form-grid">${simpleNumber('lateGrace','Grace minutes',l.graceMinutes)}${simpleNumber('lateFlat','Flat penalty',l.flatPenalty)}${simpleNumber('latePerMinute','Penalty per late minute',l.perMinutePenalty)}${simpleNumber('lateMaximum','Maximum penalty',l.maxPenalty)}</div><div class="actions"><button id="saveCompensation" class="primary">${tr('save')}</button></div></div><div class="panel"><h3>Compensation simulator</h3><div class="form-grid"><label class="field"><span>Committed arrival</span><input id="committedAt" type="datetime-local"></label><label class="field"><span>Actual arrival</span><input id="actualAt" type="datetime-local"></label></div><div class="actions"><button id="simulateLate" class="secondary">Calculate</button></div><pre id="lateResult" class="result-box">No calculation yet.</pre></div></div>`},
 async saferideAdmin(){const c=await api('/v1/admin/config'),s=c.businessRules.saferide;return `<div class="grid"><div class="panel"><div class="panel-header"><h3>SafeRide controls</h3>${badge(s.enabled?'ACTIVE':'OFF')}</div>${toggle('saferideEnabled',s.enabled)}${toggle('saferideAlwaysVisible',s.alwaysVisible)}${toggle('saferideNightSuggest',s.nightSuggest)}${toggle('saferideRiskPrompt',s.highRiskZonePrompt)}${toggle('saferideTrustedPriority',s.trustedDriverPriority)}<div class="actions"><button class="primary" id="saveSafeRide">${tr('save')}</button></div></div><div class="panel"><h3>Passenger safety experience</h3><ul class="feature-list"><li>Trusted verified driver priority</li><li>Live trip sharing</li><li>Route deviation monitoring</li><li>Emergency-contact alert</li><li>One-tap SOS and ride replay</li></ul><div class="notice night">Night bookings automatically receive a prominent SafeRide recommendation.</div><div class="notice risk">High-risk pickup zones display a stronger safety prompt.</div></div></div>`},
@@ -204,10 +222,62 @@ function renderDriverVerification(data,promoters=[]){
   <section class="assignment-card"><div><h4>Driver hierarchy assignment</h4><p class="muted">Every Driver must remain under a Promoter. Reassignment resets stage approvals but keeps uploaded documents.</p></div><div class="assignment-grid"><label class="field"><span>Promoter *</span><select id="assignDriverPromoter"><option value="">Select an active Promoter</option>${promoterOptions}</select></label><div class="assignment-current"><small>Currently assigned</small><b>${esc(assignment.promoter?.name||'Not assigned')}</b><span class="mono muted">${esc(assignment.promoter?.id||'-')}</span><small>Area Promoter: ${esc(assignment.areaPromoter?.name||assignment.areaPromoter?.id||'Not assigned — Admin bypass may be used later')}</small></div><button class="secondary" id="assignDriverPromoterButton" data-driver="${esc(profile.id)}">${assignment.promoter?'Reassign Promoter':'Assign Promoter'}</button></div></section>
   <div class="approval-chain-grid">${stageCard('1. Promoter partial approval',approval.promoter,'Assigned Promoter must pre-approve the Driver.')}${stageCard('2. Area Promoter approval',approval.areaPromoter,'Area Promoter reviews after Promoter approval.')}${stageCard('3. Admin final approval',approval.admin,'Only Admin activates the Driver.')}</div>
   <div class="verification-summary"><div>${badge(profile.status||'DRAFT')}<span>Driver status</span></div><div>${verificationBadge(verification)}<span>Admin document verification</span></div><div><strong>${esc(verification.approvedCount||0)}/${esc(verification.requiredCount||5)}</strong><span>Final-verified documents</span></div></div><div class="verification-grid">${required}</div>
-  <div class="overall-review"><label class="field full"><span>Final review / bypass reason</span><textarea id="driverReviewRemarks" rows="3" placeholder="Mandatory when bypassing Area Promoter">${esc(profile.reviewRemarks||'')}</textarea></label><div class="actions"><button class="primary review-driver-status" data-driver="${esc(profile.id)}" data-status="APPROVED" data-bypass="false" ${directReady?'':'disabled'}>Final Approve</button><button class="secondary review-driver-status" data-driver="${esc(profile.id)}" data-status="APPROVED" data-bypass="true" ${bypassReady?'':'disabled'}>Approve without Area Promoter</button><button class="danger review-driver-status" data-driver="${esc(profile.id)}" data-status="REJECTED" data-bypass="false">Reject Driver</button><button class="secondary review-driver-status" data-driver="${esc(profile.id)}" data-status="SUSPENDED" data-bypass="false">Suspend Driver</button></div>${!approval.promoterAssigned?'<p class="muted">Assign the Driver under a Promoter first.</p>':''}${approval.promoterAssigned&&!promoterReady?'<p class="muted">Promoter partial approval is mandatory before Admin final approval.</p>':''}${promoterReady&&!directReady&&!bypassReady?'<p class="muted">Admin must final-verify all five documents first.</p>':''}${bypassReady?'<p class="muted">Area Promoter approval is pending. Admin may bypass it only with a written reason.</p>':''}</div>`;
+  <div class="approval-checklist">
+    <h4>Final approval checklist</h4>
+    <div>${approval.promoterAssigned?badge('OK'):badge('MISSING')}<span>Promoter assigned</span></div>
+    <div>${approval.allDocumentsUploaded?badge('OK'):badge('MISSING')}<span>All documents uploaded</span></div>
+    <div>${approval.promoterApproved?badge('OK'):badge('PENDING')}<span>Promoter partial approval</span></div>
+    <div>${approval.areaApproved?badge('OK'):badge('PENDING')}<span>Area approval / Admin bypass</span></div>
+    <div>${approval.documentsFinalApproved?badge('OK'):badge('PENDING')}<span>Admin document verification</span></div>
+  </div>
+  <div class="overall-review">
+    <label class="field full"><span>Review / suspension / bypass reason</span>
+      <textarea id="driverReviewRemarks" rows="3" placeholder="Reason required for Suspend, Reject and Area bypass">${esc(profile.reviewRemarks||'')}</textarea>
+    </label>
+    <div class="actions">
+      ${profile.suspended||profile.status==='SUSPENDED'
+        ?`<button class="primary review-driver-status" data-driver="${esc(profile.id)}" data-status="REACTIVATE" data-bypass="false">Lift Suspension & Approve</button>`
+        :`<button class="primary review-driver-status" data-driver="${esc(profile.id)}" data-status="APPROVED" data-bypass="false" ${directReady?'':'disabled'}>Final Approve</button>
+          <button class="secondary review-driver-status" data-driver="${esc(profile.id)}" data-status="APPROVED" data-bypass="true" ${bypassReady?'':'disabled'}>Approve without Area Promoter</button>`}
+      <button class="danger review-driver-status" data-driver="${esc(profile.id)}" data-status="REJECTED" data-bypass="false">Reject Driver</button>
+      ${profile.suspended||profile.status==='SUSPENDED'
+        ?''
+        :`<button class="secondary review-driver-status" data-driver="${esc(profile.id)}" data-status="SUSPENDED" data-bypass="false">Suspend Driver</button>`}
+    </div>
+    ${!approval.promoterAssigned?'<p class="muted">Assign a Promoter first.</p>':''}
+    ${approval.promoterAssigned&&!promoterReady?'<p class="muted">Promoter partial approval is pending in the Promoter App.</p>':''}
+    ${promoterReady&&!directReady&&!bypassReady?'<p class="muted">Final-verify all five documents first.</p>':''}
+    ${bypassReady?'<p class="muted">Area approval is pending. Enter a reason and use the bypass button.</p>':''}
+  </div>`;
 }
 
-function promoterTable(items){return table(items,[['Partner',x=>`<b>${esc(x.fullName||x.name||x.id)}</b><div class="mono muted">${esc(x.mobile||x.id)}</div>`],['Role',x=>badge(x.role)],['Area',x=>esc(x.areaId||'-')],['Status',x=>badge(x.status||'ACTIVE')],['Drivers',x=>esc((x.driverIds||[]).length)],['Joined',x=>esc(x.createdAt||'-')]])}
+function promoterTable(items,areas=[]){
+  const options=current=>areas.map(x=>
+    `<option value="${esc(x.id)}" ${x.id===current?'selected':''}>${esc(x.name||x.id)}</option>`
+  ).join('');
+  return table(items,[
+    ['Partner',x=>`<b>${esc(x.name||x.id)}</b><div class="mono muted">${esc(x.mobile||x.id)}</div>`],
+    ['Role',x=>badge(x.role)],
+    ['Area',x=>esc(x.areaId||'-')],
+    ['Area Promoter',x=>x.role==='PROMOTER'
+      ?`<select class="partner-area-select" data-id="${esc(x.id)}">
+          <option value="">Select Area Promoter</option>
+          ${options(x.areaPromoterId)}
+        </select>
+        <button class="secondary assign-partner-area" data-id="${esc(x.id)}">Assign</button>`
+      :'-'],
+    ['Status',x=>badge(x.status||'ACTIVE')],
+    ['Drivers',x=>esc((x.driverIds||[]).length)],
+    ['Actions',x=>{
+      const status=String(x.status||'ACTIVE');
+      if(status==='TERMINATED')return '<span class="muted">Permanent</span>';
+      return `${status==='ACTIVE'
+        ?`<button class="secondary partner-status" data-id="${esc(x.id)}" data-status="SUSPENDED">Suspend</button>`
+        :`<button class="primary partner-status" data-id="${esc(x.id)}" data-status="ACTIVE">Reactivate</button>`}
+        <button class="danger partner-status" data-id="${esc(x.id)}" data-status="TERMINATED">Terminate</button>`;
+    }],
+  ]);
+}
 
 function rideTable(items){return table(items,[['Ride',x=>`<span class="mono">${esc(x.id)}</span>`],['Status',x=>badge(x.status)],['Passenger',x=>esc(x.passengerId)],['Driver',x=>esc(x.driverId||'-')],['Fare',x=>esc(x.fareEstimate?.amount||x.fareEstimate?.amountPaise/100||'-')],['Created',x=>esc(x.createdAt||'-')]])}
 function providerSelect(key,label,opts,current){return `<label class="field"><span>${label}</span><select data-provider="${key}">${opts.map(x=>`<option value="${x}" ${current.active===x?'selected':''}>${x}</option>`).join('')}</select></label><label class="field"><span>${label} mode</span><select data-mode="${key}"><option value="test" ${current.mode==='test'?'selected':''}>test</option><option value="live" ${current.mode==='live'?'selected':''}>live</option></select></label>`}
@@ -230,41 +300,132 @@ if(page==='drivers'){
   const updateAreaDisplay=(select,display)=>{const areaId=select?.selectedOptions?.[0]?.dataset?.areaPromoter||'';if(display)display.value=areaId?`Auto-assigned Area Promoter: ${areaId}`:'No Area Promoter linked — Admin may bypass later with reason'};
   const bindReviewButtons=()=>{$$('.review-driver').forEach(b=>b.onclick=()=>openDriverReview(b.dataset.id))};
   const refreshDrivers=async()=>{const d=await api('/v1/admin/drivers'),online=new Map((d.availability||[]).map(x=>[x.driverId||x.id,x])),q=($('#driverSearch')?.value||'').toLowerCase(),rows=(d.profiles||[]).filter(x=>JSON.stringify(x).toLowerCase().includes(q));$('#driverTable').innerHTML=driverRows(rows,online);bindReviewButtons()};
-  const openDriverReview=async driverId=>{const panel=$('#driverReviewPanel');panel.hidden=false;panel.innerHTML='<div class="loading">Loading verification documents…</div>';panel.scrollIntoView({behavior:'smooth',block:'start'});try{const[detail,promoters]=await Promise.all([api(`/v1/admin/drivers/${encodeURIComponent(driverId)}`),activePromoters()]);panel.innerHTML=renderDriverVerification(detail,promoters);$('#closeDriverReview').onclick=()=>{panel.hidden=true;panel.innerHTML=''};const assign=$('#assignDriverPromoterButton');if(assign)assign.onclick=async()=>{const promoterId=$('#assignDriverPromoter')?.value||'';if(!promoterId)return toast('Select an active Promoter');try{await api(`/v1/admin/drivers/${encodeURIComponent(driverId)}/assign-promoter`,{method:'POST',body:JSON.stringify({promoterId})});toast('Driver assigned under Promoter');await openDriverReview(driverId);await refreshDrivers()}catch(error){toast(error.message)}};$$('.review-document').forEach(button=>{button.onclick=async()=>{const remarksElement=$(`#${button.dataset.remarks}`);try{await api(`/v1/admin/drivers/${encodeURIComponent(button.dataset.driver)}/documents/${encodeURIComponent(button.dataset.document)}/review`,{method:'POST',body:JSON.stringify({status:button.dataset.status,remarks:remarksElement?.value?.trim()||null})});toast(`Document ${button.dataset.status.toLowerCase()}`);await openDriverReview(button.dataset.driver);await refreshDrivers()}catch(error){toast(error.message)}}});$$('.review-driver-status').forEach(button=>{button.onclick=async()=>{try{await api(`/v1/admin/drivers/${encodeURIComponent(button.dataset.driver)}/review`,{method:'POST',body:JSON.stringify({status:button.dataset.status,remarks:$('#driverReviewRemarks')?.value?.trim()||null,bypassArea:button.dataset.bypass==='true'})});toast(`Driver ${button.dataset.status.toLowerCase()}`);await openDriverReview(button.dataset.driver);await refreshDrivers()}catch(error){toast(error.message)}}})}catch(error){panel.innerHTML=`<div class="danger-strip"><h3>Unable to load driver verification</h3><p>${esc(error.message)}</p></div>`}};
+  const openDriverReview=async driverId=>{const panel=$('#driverReviewPanel');panel.hidden=false;panel.innerHTML='<div class="loading">Loading verification documents…</div>';panel.scrollIntoView({behavior:'smooth',block:'start'});try{const[detail,promoters]=await Promise.all([api(`/v1/admin/drivers/${encodeURIComponent(driverId)}`),activePromoters()]);panel.innerHTML=renderDriverVerification(detail,promoters);$('#closeDriverReview').onclick=()=>{panel.hidden=true;panel.innerHTML=''};const assign=$('#assignDriverPromoterButton');if(assign)assign.onclick=async()=>{const promoterId=$('#assignDriverPromoter')?.value||'';if(!promoterId)return toast('Select an active Promoter');try{await api(`/v1/admin/drivers/${encodeURIComponent(driverId)}/assign-promoter`,{method:'POST',body:JSON.stringify({promoterId})});toast('Driver assigned under Promoter');await openDriverReview(driverId);await refreshDrivers()}catch(error){toast(error.message)}};$$('.review-document').forEach(button=>{button.onclick=async()=>{const remarksElement=$(`#${button.dataset.remarks}`);try{await api(`/v1/admin/drivers/${encodeURIComponent(button.dataset.driver)}/documents/${encodeURIComponent(button.dataset.document)}/review`,{method:'POST',body:JSON.stringify({status:button.dataset.status,remarks:remarksElement?.value?.trim()||null})});toast(`Document ${button.dataset.status.toLowerCase()}`);await openDriverReview(button.dataset.driver);await refreshDrivers()}catch(error){toast(error.message)}}});$$('.review-driver-status').forEach(button=>{button.onclick=async()=>{const status=button.dataset.status,remarks=$('#driverReviewRemarks')?.value?.trim()||'';if(['SUSPENDED','REJECTED'].includes(status)&&!remarks)return toast('Write the reason first');if(button.dataset.bypass==='true'&&!remarks)return toast('Write the Area Promoter bypass reason first');try{await api(`/v1/admin/drivers/${encodeURIComponent(button.dataset.driver)}/review`,{method:'POST',body:JSON.stringify({status,remarks:remarks||null,bypassArea:button.dataset.bypass==='true'})});toast(status==='REACTIVATE'?'Driver suspension lifted':`Driver ${status.toLowerCase()}`);await openDriverReview(button.dataset.driver);await refreshDrivers()}catch(error){toast(error.message)}}})}catch(error){panel.innerHTML=`<div class="danger-strip"><h3>Unable to load driver verification</h3><p>${esc(error.message)}</p></div>`}};
   $('#driverSearch').oninput=refreshDrivers;bindReviewButtons();$('#addDriver').onclick=()=>{$('#driverCreatePanel').hidden=false;$('#driverCreatePanel').scrollIntoView({behavior:'smooth'})};$('#closeDriverForm').onclick=()=>{$('#driverCreatePanel').hidden=true};const promoterSelect=$('#driverPromoterId'),areaDisplay=$('#driverAreaPromoterDisplay');if(promoterSelect){promoterSelect.onchange=()=>updateAreaDisplay(promoterSelect,areaDisplay);updateAreaDisplay(promoterSelect,areaDisplay)};
   $('#createDriverAccount').onclick=async()=>{const body={fullName:$('#driverFullName').value.trim(),mobile:$('#driverMobile').value.replace(/\D/g,''),loginId:$('#driverLoginId').value.trim()||undefined,temporaryPassword:$('#driverTempPassword').value,promoterId:$('#driverPromoterId').value,areaId:$('#driverAreaId').value.trim()||undefined,primaryZoneId:$('#driverZoneId').value.trim()||undefined,preferredLanguage:$('#driverLanguage').value,vehicle:{number:$('#driverVehicleNumber').value.trim()||undefined,type:$('#driverVehicleType').value}};if(!body.fullName||!body.mobile||body.temporaryPassword.length<8)return toast('Name, mobile and an 8+ character temporary password are required');if(!body.promoterId)return toast('Assign the Driver under an active Promoter');try{const result=await api('/v1/admin/drivers/create',{method:'POST',body:JSON.stringify(body)}),box=$('#driverCreateResult');box.hidden=false;box.textContent=`Driver created successfully\nDriver ID: ${result.driver?.id||'-'}\nLogin ID: ${result.staff?.loginId||result.driver?.id||'-'}\nMobile: ${result.staff?.mobile||body.mobile}\nPromoter: ${result.promoter?.name||result.promoter?.id||'-'}\nArea Promoter: ${result.areaPromoter?.name||result.areaPromoter?.id||'Not assigned — Admin bypass allowed later'}\nMust change password: YES`;toast('Driver account created and assigned');await refreshDrivers()}catch(error){toast(error.message)}};
 }
 if(page==='promoterManagement'){
+  const bind=()=>{
+    $$('.assign-partner-area').forEach(button=>{
+      button.onclick=async()=>{
+        const promoterId=button.dataset.id;
+        const areaPromoterId=$(`.partner-area-select[data-id="${promoterId}"]`)?.value||'';
+        if(!areaPromoterId)return toast('Select an active Area Promoter');
+        try{
+          const result=await api(
+            `/v1/admin/promoters/${encodeURIComponent(promoterId)}/assign-area`,
+            {
+              method:'POST',
+              body:JSON.stringify({areaPromoterId}),
+            },
+          );
+          toast(`Area assigned; ${result.affectedDriverIds?.length||0} Driver approval chain(s) reset`);
+          apply();
+        }catch(error){toast(error.message)}
+      };
+    });
+    $$('.partner-status').forEach(button=>{
+      button.onclick=async()=>{
+        const status=button.dataset.status;
+        let reason='';
+        if(['SUSPENDED','TERMINATED'].includes(status)){
+          reason=prompt(
+            status==='SUSPENDED'
+              ?'Write suspension reason'
+              :'Write termination reason',
+          )?.trim()||'';
+          if(!reason)return toast('Reason is mandatory');
+        }else{
+          reason=prompt('Reactivation note (optional)')?.trim()||'';
+        }
+        try{
+          await api(
+            `/v1/admin/promoters/${encodeURIComponent(button.dataset.id)}/status`,
+            {
+              method:'POST',
+              body:JSON.stringify({status,reason}),
+            },
+          );
+          toast(`Partner ${status.toLowerCase()}`);
+          apply();
+        }catch(error){toast(error.message)}
+      };
+    });
+  };
+
   const apply=async()=>{
     const d=await api('/v1/admin/promoters');
-    const q=$('#promoterSearch').value.toLowerCase();
-    const role=$('#promoterRole').value;
-    $('#promoterTable').innerHTML=promoterTable((d.items||[]).filter(x=>(!role||x.role===role)&&JSON.stringify(x).toLowerCase().includes(q)));
+    const all=d.items||[];
+    const areas=all.filter(x=>
+      x.role==='AREA_PROMOTER'&&x.status==='ACTIVE'
+    );
+    const q=($('#promoterSearch')?.value||'').toLowerCase();
+    const role=$('#promoterRole')?.value||'';
+    const status=$('#promoterStatusFilter')?.value||'';
+    const filtered=all.filter(x=>
+      (!role||x.role===role)&&
+      (!status||x.status===status)&&
+      JSON.stringify(x).toLowerCase().includes(q)
+    );
+    $('#promoterTable').innerHTML=promoterTable(filtered,areas);
+    bind();
   };
+
   $('#promoterSearch').oninput=apply;
   $('#promoterRole').onchange=apply;
-  $('#addPromoter').onclick=()=>{$('#partnerCreatePanel').hidden=false;$('#partnerCreatePanel').scrollIntoView({behavior:'smooth'})};
-  $('#closePartnerForm').onclick=()=>{$('#partnerCreatePanel').hidden=true};
+  $('#promoterStatusFilter').onchange=apply;
+  bind();
+
+  const roleSelect=$('#partnerCreateRole');
+  const parentField=$('#partnerParentField');
+  const toggleParent=()=>{
+    if(parentField){
+      parentField.hidden=roleSelect?.value==='AREA_PROMOTER';
+    }
+  };
+  roleSelect.onchange=toggleParent;
+  toggleParent();
+
+  $('#addPromoter').onclick=()=>{
+    $('#partnerCreatePanel').hidden=false;
+    $('#partnerCreatePanel').scrollIntoView({behavior:'smooth'});
+  };
+  $('#closePartnerForm').onclick=()=>{
+    $('#partnerCreatePanel').hidden=true;
+  };
   $('#createPartnerAccount').onclick=async()=>{
+    const role=$('#partnerCreateRole').value;
     const body={
       name:$('#partnerName').value.trim(),
       mobile:$('#partnerMobile').value.replace(/\D/g,''),
       loginId:$('#partnerLoginId').value.trim()||undefined,
-      role:$('#partnerCreateRole').value,
+      role,
       areaId:$('#partnerAreaId').value.trim()||undefined,
-      areaPromoterId:$('#partnerParentId').value.trim()||undefined,
-      temporaryPassword:$('#partnerTempPassword').value
+      areaPromoterId:role==='PROMOTER'
+        ?($('#partnerParentId').value||undefined)
+        :undefined,
+      temporaryPassword:$('#partnerTempPassword').value,
     };
     if(!body.name||!body.mobile||body.temporaryPassword.length<8){
       return toast('Name, mobile and an 8+ character temporary password are required');
     }
     try{
-      const result=await api('/v1/admin/partners/create',{method:'POST',body:JSON.stringify(body)});
+      const result=await api('/v1/admin/partners/create',{
+        method:'POST',
+        body:JSON.stringify(body),
+      });
       const box=$('#partnerCreateResult');
       box.hidden=false;
-      box.textContent=`Partner created successfully\nPartner ID: ${result.partner?.id||'-'}\nLogin ID: ${result.staff?.loginId||result.partner?.id||'-'}\nRole: ${result.staff?.role||body.role}\nMobile: ${result.staff?.mobile||body.mobile}\nMust change password: YES`;
+      box.textContent=
+        `Partner created successfully\n`+
+        `Partner ID: ${result.partner?.id||'-'}\n`+
+        `Login ID: ${result.staff?.loginId||result.partner?.id||'-'}\n`+
+        `Role: ${result.staff?.role||body.role}\n`+
+        `Area Promoter: ${result.areaPromoter?.name||result.areaPromoter?.id||'Not assigned'}\n`+
+        `Mobile: ${result.staff?.mobile||body.mobile}\n`+
+        `Must change password: YES`;
       toast('Partner account created');
-      await apply();
+      apply();
     }catch(error){toast(error.message)}
   };
 }

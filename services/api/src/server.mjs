@@ -13,7 +13,7 @@ import { rankDrivers } from './domain/driver-matching.mjs';
 import { estimateFare } from './domain/fare-engine.mjs';
 import { createBooking, getBooking, updateBooking, acceptBooking, listBookingEvents, listBookingsForPassenger, upsertDriver, getDriver, getAvailableDrivers, listAllBookings, listAllRuntimeDrivers } from './store/memory-store.mjs';
 import { createOtp, verifyOtp, createPassengerSession, authenticatePassengerToken, revokePassengerSession, upsertPassenger, getPassenger, listPlaces, addPlace, addRating, addComplaint, listAllComplaints, updateComplaint } from './store/passenger-store.mjs';
-import { registerDriver, getDriverProfile, updateDriverProfile, addDriverDocument, listDriverDocuments, reviewDriverDocument, getDriverVerificationSummary, setDriverApprovalContext, getDriverApprovalSummary, reviewDriverStage, reviewDriver, setDriverOnline, getDriverWallet, creditDriver, requestSettlement, listSettlements, updateSettlement, listAllDriverProfiles, listAllSettlements, createDriverSession, authenticateDriverToken, revokeDriverSession, findDriverByMobile } from './store/driver-store.mjs';
+import { registerDriver, getDriverProfile, updateDriverProfile, addDriverDocument, listDriverDocuments, reviewDriverDocument, getDriverVerificationSummary, setDriverApprovalContext, getDriverApprovalSummary, reviewDriverStage, reviewDriver, suspendDriver, liftDriverSuspension, setDriverOnline, getDriverWallet, creditDriver, requestSettlement, listSettlements, updateSettlement, listAllDriverProfiles, listAllSettlements, createDriverSession, authenticateDriverToken, revokeDriverSession, findDriverByMobile } from './store/driver-store.mjs';
 import { onboardingReadiness, calculateDriverEarning } from './domain/driver-rules.mjs';
 import { validateLocationSample } from './domain/location-rules.mjs';
 import { createPayment, getPayment, getPaymentByBooking, updatePayment, addRefund, listRefunds, listPaymentLedger, listAllPayments, findPaymentByProviderOrder, findPaymentByProviderPayment, recordWebhookEvent, listWebhookEvents, addReconciliation, listReconciliations } from './store/payment-store.mjs';
@@ -22,7 +22,7 @@ import { putProviderCredential, listCredentialStatus, deleteProviderCredential, 
 import { registerDevice, deactivateDevice, listDevices, allDevices } from './store/device-store.mjs';
 import { createSos, updateSos, listSos, getSos, addNotification, updateNotification, listNotifications, addRiskEvent, listRiskEvents, hitRateLimit } from './store/safety-store.mjs';
 import { calculateFareQuote, calculateCommissionSplit, driverMatchesPayment, serviceAvailability, evaluateLateArrival } from './domain/astride-business-rules.mjs';
-import { upsertPromoter, updatePromoterProfile, getPromoter, listPromoters, linkDriver, getDriverPartnerLink, scopedDriverIds, addCoachingLog, listCoachingLogs, addPromoterEarning, earningsSummary, promoterDashboard, driverPerformanceRows, releaseMonthlyEarnings, requestPromoterWithdrawal, listPartnerWithdrawals, partnerLogin, authenticatePartner, partnerLogout } from './store/promoter-store.mjs';
+import { upsertPromoter, updatePromoterProfile, updatePromoterStatus, assignPromoterToArea, updateLinkedDriversArea, getPromoter, listPromoters, linkDriver, getDriverPartnerLink, scopedDriverIds, addCoachingLog, listCoachingLogs, addPromoterEarning, earningsSummary, promoterDashboard, driverPerformanceRows, releaseMonthlyEarnings, requestPromoterWithdrawal, listPartnerWithdrawals, partnerLogin, authenticatePartner, partnerLogout } from './store/promoter-store.mjs';
 import { createStaffAccount, updateStaffAccount, listStaffAccounts, staffLogin, authenticateStaffToken, revokeStaffSession, changeStaffPassword, adminResetStaffPassword, createPasswordReset, verifyPasswordReset } from './store/staff-auth-store.mjs';
 import { ensurePassengerWallet, walletSummary, listWalletTransactions, creditPassengerWallet, debitPassengerWallet, refundPassengerWallet, referralProfile, applyReferralCode, listReferralHistory, referralRewards, completeReferralFirstRide, adminReferralOverview } from './store/passenger-wallet-referral-store.mjs';
 import { setProfileMedia, getProfileMedia, createSupportIssue, listSupportIssues, updateSupportIssue } from './store/profile-support-store.mjs';
@@ -108,7 +108,7 @@ const driverUser=authenticateDriverToken(req.headers.authorization)||staffDriver
 const requirePassenger=(id=null)=>{if(!passengerUser){json(res,401,{error:'passenger_auth_required'});return false;}if(id&&passengerUser.id!==id){json(res,403,{error:'passenger_scope_denied'});return false;}return true;};
 const requireDriver=(id=null)=>{if(!driverUser){json(res,401,{error:'driver_auth_required'});return false;}if(id&&driverUser.id!==id){json(res,403,{error:'driver_scope_denied'});return false;}return true;};
 const canAccessBooking=(b)=>Boolean(b&&(adminUser&&adminCan(adminUser,'rides.read')||passengerUser&&b.passengerId===passengerUser.id||driverUser&&b.driverId===driverUser.id));
-if(req.method==='GET'&&path==='/health')return json(res,200,{ok:true,service:'local-ride-api',version:'3.16.0-final-approval-workflow',architecture:'mobile-first'});if(req.method==='GET'&&/^\/v1\/uploads\/[^/]+\/[^/]+\/[^/]+$/.test(path)){
+if(req.method==='GET'&&path==='/health')return json(res,200,{ok:true,service:'local-ride-api',version:'3.16.2-partner-controls',architecture:'mobile-first'});if(req.method==='GET'&&/^\/v1\/uploads\/[^/]+\/[^/]+\/[^/]+$/.test(path)){
   const parts=path.split('/');
   const actorType=safeUploadSegment(parts[3]).toLowerCase();
   const actorId=safeUploadSegment(parts[4]);
@@ -435,30 +435,49 @@ if(req.method==='POST'&&path==='/v1/admin/partners/create'){
   const p=await readBody(req);
   requireFields(p,['mobile','name','role','temporaryPassword']);
   try{
+    const role=String(p.role||'').toUpperCase();
+    if(!['PROMOTER','AREA_PROMOTER'].includes(role)){
+      return json(res,422,{error:'invalid_partner_role'});
+    }
+    let areaPromoter=null;
+    if(role==='PROMOTER'&&p.areaPromoterId){
+      areaPromoter=getPromoter(String(p.areaPromoterId));
+      if(
+        !areaPromoter ||
+        areaPromoter.role!=='AREA_PROMOTER' ||
+        areaPromoter.status!=='ACTIVE'
+      ){
+        return json(res,422,{error:'active_area_promoter_required'});
+      }
+    }
     const partner=upsertPromoter({
-      role:p.role,
-      mobile:p.mobile,
+      role,
+      mobile:String(p.mobile).replace(/\D/g,''),
       name:p.name,
       status:'ACTIVE',
-      areaPromoterId:p.areaPromoterId||null,
-      areaId:p.areaId||null,
+      areaPromoterId:role==='PROMOTER'
+        ?areaPromoter?.id||null
+        :null,
+      areaId:p.areaId||areaPromoter?.areaId||null,
     });
     const staff=createStaffAccount({
-      role:p.role,
-      mobile:p.mobile,
+      role,
+      mobile:String(p.mobile).replace(/\D/g,''),
       loginId:p.loginId||partner.id,
       name:p.name,
       password:p.temporaryPassword,
       linkedEntityId:partner.id,
-      areaId:p.areaId||null,
+      areaId:partner.areaId||null,
       createdBy:adminUser.id,
       mustChangePassword:true,
     });
     writeAudit(adminUser.id,'PARTNER_STAFF_CREATED',{
       partnerId:partner.id,
       staffId:staff.id,
+      role,
+      areaPromoterId:partner.areaPromoterId||null,
     });
-    return json(res,201,{partner,staff});
+    return json(res,201,{partner,staff,areaPromoter});
   }catch(error){return json(res,422,{error:error.message});}
 }
 if(req.method==='POST'&&/^\/v1\/admin\/staff\/[^/]+\/reset-password$/.test(path)){
@@ -726,20 +745,35 @@ if(req.method==='POST'&&/^\/v1\/admin\/drivers\/[^/]+\/review$/.test(path)){
   requireFields(p,['status']);
   try{
     const status=String(p.status).toUpperCase();
-    const profile=status==='SUSPENDED'
-      ?reviewDriver(driverId,{status,remarks:p.remarks})
-      :reviewDriverStage(driverId,{
-          stage:'ADMIN',
-          status,
-          actorId:adminUser.id,
-          remarks:p.remarks||null,
-          bypassArea:Boolean(p.bypassArea),
-        });
+    const reason=String(p.remarks||'').trim();
+    if(['SUSPENDED','REJECTED'].includes(status)&&!reason){
+      return json(res,422,{error:'review_reason_required'});
+    }
+    let profile;
+    if(status==='SUSPENDED'){
+      profile=suspendDriver(driverId,{
+        reason,
+        actorId:adminUser.id,
+      });
+    }else if(status==='REACTIVATE'){
+      profile=liftDriverSuspension(driverId,{
+        reason:reason||'Suspension lifted by Admin',
+        actorId:adminUser.id,
+      });
+    }else{
+      profile=reviewDriverStage(driverId,{
+        stage:'ADMIN',
+        status,
+        actorId:adminUser.id,
+        remarks:reason||null,
+        bypassArea:Boolean(p.bypassArea),
+      });
+    }
     if(!profile)return json(res,404,{error:'driver_not_found'});
     writeAudit(adminUser.id,'DRIVER_FINAL_REVIEW',{
-      driverId,
-      status,
+      driverId,status,
       bypassArea:Boolean(p.bypassArea),
+      reason:reason||null,
     });
     return json(res,200,{
       profile,
@@ -814,7 +848,87 @@ if(req.method==='GET'&&path==='/v1/admin/campaign-redemptions'){if(!requireAdmin
 if(req.method==='POST'&&path==='/v1/admin/campaign-events'){if(!requireAdmin('campaigns.manage'))return;const p=await readBody(req);requireFields(p,['actorType','actorId','metric']);const awards=recordCampaignEvent({...p,eventType:p.eventType||p.metric,eventId:p.eventId||crypto.randomUUID()});writeAudit(adminUser.id,'CAMPAIGN_EVENT_EVALUATED',{metric:p.metric,actorType:p.actorType,actorId:p.actorId,awardCount:awards.length});return json(res,200,{awards});}
 
 
-if(req.method==='GET'&&path==='/v1/admin/promoters'){if(!requireAdmin('dashboard.read'))return;return json(res,200,{items:listPromoters()});}
+if(req.method==='GET'&&path==='/v1/admin/promoters'){
+  if(!requireAdmin('dashboard.read'))return;
+  const staffAccounts=listStaffAccounts();
+  const items=listPromoters().map(partner=>({
+    ...partner,
+    driverIds:scopedDriverIds(partner.id),
+    parentAreaPromoter:partner.areaPromoterId
+      ?getPromoter(partner.areaPromoterId)
+      :null,
+    staff:staffAccounts.find(item=>
+      item.linkedEntityId===partner.id &&
+      ['PROMOTER','AREA_PROMOTER'].includes(item.role)
+    )||null,
+  }));
+  return json(res,200,{items});
+}
+if(req.method==='POST'&&/^\/v1\/admin\/promoters\/[^/]+\/status$/.test(path)){
+  if(!requireAdmin('dashboard.read')&&!adminCan(adminUser,'*'))return;
+  const partnerId=path.split('/')[4];
+  const p=await readBody(req);
+  requireFields(p,['status']);
+  try{
+    const status=String(p.status).toUpperCase();
+    const partner=updatePromoterStatus(partnerId,{
+      status,
+      reason:p.reason||null,
+      reviewedBy:adminUser.id,
+    });
+    if(!partner)return json(res,404,{error:'partner_not_found'});
+    const staffAccounts=listStaffAccounts().filter(item=>
+      item.linkedEntityId===partnerId &&
+      ['PROMOTER','AREA_PROMOTER'].includes(item.role)
+    );
+    for(const staff of staffAccounts){
+      updateStaffAccount(staff.id,{status});
+    }
+    writeAudit(adminUser.id,'PARTNER_STATUS_UPDATED',{
+      partnerId,status,reason:p.reason||null,
+    });
+    return json(res,200,{partner,staffAccounts});
+  }catch(error){return json(res,422,{error:error.message});}
+}
+if(req.method==='POST'&&/^\/v1\/admin\/promoters\/[^/]+\/assign-area$/.test(path)){
+  if(!requireAdmin('dashboard.read')&&!adminCan(adminUser,'*'))return;
+  const promoterId=path.split('/')[4];
+  const p=await readBody(req);
+  requireFields(p,['areaPromoterId']);
+  try{
+    const promoter=assignPromoterToArea(promoterId,{
+      areaPromoterId:p.areaPromoterId,
+      areaId:p.areaId||null,
+      reason:p.reason||null,
+      reviewedBy:adminUser.id,
+    });
+    if(!promoter)return json(res,404,{error:'promoter_not_found'});
+    const affectedDriverIds=updateLinkedDriversArea(
+      promoterId,
+      promoter.areaPromoterId,
+    );
+    for(const driverId of affectedDriverIds){
+      const approval=getDriverApprovalSummary(driverId);
+      setDriverApprovalContext(driverId,{
+        createdByType:approval?.createdByType||'PROMOTER',
+        createdById:approval?.createdById||promoterId,
+        promoterId,
+        areaPromoterId:promoter.areaPromoterId,
+      });
+    }
+    writeAudit(adminUser.id,'PROMOTER_AREA_ASSIGNED',{
+      promoterId,
+      areaPromoterId:promoter.areaPromoterId,
+      affectedDriverIds,
+    });
+    return json(res,200,{
+      promoter,
+      areaPromoter:getPromoter(promoter.areaPromoterId),
+      affectedDriverIds,
+    });
+  }catch(error){return json(res,422,{error:error.message});}
+}
+
 if(req.method==='POST'&&path==='/v1/admin/promoter-earnings/release'){if(!requireAdmin('settlements.read')&&!adminCan(adminUser,'*'))return;const p=await readBody(req);requireFields(p,['month']);const out=releaseMonthlyEarnings(p);writeAudit(adminUser.id,'PROMOTER_EARNINGS_RELEASED',out);return json(res,200,out);}
 
 if(req.method==='GET'&&path==='/v1/admin/dashboard'){if(!requireAdmin('dashboard.read'))return;const bookings=listAllBookings(),drivers=listAllDriverProfiles(),runtimeDrivers=listAllRuntimeDrivers(),payments=listAllPayments(),complaints=listAllComplaints(),settlements=listAllSettlements();const activeStatuses=new Set(['SEARCHING','DRIVER_ASSIGNED','DRIVER_ARRIVING','DRIVER_ARRIVED','OTP_VERIFIED','IN_PROGRESS']);return json(res,200,{generatedAt:new Date().toISOString(),cards:{totalBookings:bookings.length,liveRides:bookings.filter(b=>activeStatuses.has(b.status)).length,completedRides:bookings.filter(b=>b.status==='COMPLETED').length,driversRegistered:drivers.length,driversOnline:runtimeDrivers.filter(d=>d.online).length,openComplaints:complaints.filter(c=>c.status!=='CLOSED').length,paymentsCaptured:payments.filter(p=>['CAPTURED','CASH_COLLECTED'].includes(p.status)).length,pendingSettlements:settlements.filter(x=>['REQUESTED','PROCESSING'].includes(x.status)).length,openSos:listSos().filter(x=>x.status!=='RESOLVED').length,openRiskEvents:listRiskEvents().filter(x=>x.status==='OPEN').length},providers:getAdminRuntimeConfig().providers,operations:getAdminRuntimeConfig().operations});}

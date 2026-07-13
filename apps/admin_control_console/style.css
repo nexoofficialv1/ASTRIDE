@@ -89,3 +89,29 @@ html,body{max-width:100%;overflow-x:hidden}
 /* Build 327: mandatory Driver-to-Promoter assignment */
 .assignment-card{margin:14px 0 18px;padding:16px;border:1px solid var(--border);border-radius:18px;background:#f8fbff}
 .assignment-card h4{margin:0 0 5px}.assignment-grid{display:grid;grid-template-columns:minmax(260px,1fr) minmax(260px,1fr) auto;gap:12px;align-items:end;margin-top:12px}.assignment-current{display:flex;flex-direction:column;gap:4px;min-height:64px;padding:10px 12px;border:1px solid var(--border);border-radius:14px;background:#fff}@media(max-width:850px){.assignment-grid{grid-template-columns:1fr}}
+
+
+/* Build 329 */
+.partner-area-select{min-width:180px;margin-bottom:6px}
+.approval-checklist{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:9px;
+  margin:16px 0;
+  padding:15px;
+  border:1px solid var(--border);
+  border-radius:18px;
+  background:#f8fbff;
+}
+.approval-checklist h4{grid-column:1/-1;margin:0}
+.approval-checklist>div{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:9px;
+  background:#fff;
+  border-radius:12px;
+}
+@media(max-width:760px){
+  .approval-checklist{grid-template-columns:1fr}
+}

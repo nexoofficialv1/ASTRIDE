@@ -39,7 +39,7 @@ class DriversScreen extends StatelessWidget {
                 FilledButton.icon(
                   onPressed: c.busy ? null : () => _addDriver(context),
                   icon: const Icon(Icons.person_add_alt_1_rounded),
-                  label: Text(_label('Add', 'যোগ করুন', 'जोड़ें')),
+                  label: Text(_label('Add Driver', 'ড্রাইভার যোগ করুন', 'ड्राइवर जोड़ें')),
                 ),
               ],
             ],

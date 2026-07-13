@@ -3,7 +3,31 @@ const promoters=new Map(),links=new Map(),coaching=[],earnings=[],sessions=new M
 const clone=x=>structuredClone(x),now=()=>new Date().toISOString();
 const hashPassword=(value,salt=crypto.randomBytes(16).toString('hex'))=>({salt,hash:crypto.scryptSync(String(value),salt,64).toString('hex')});
 const verifyPassword=(value,record)=>{if(!record?.salt||!record?.hash)return false;const candidate=crypto.scryptSync(String(value),record.salt,64);return crypto.timingSafeEqual(candidate,Buffer.from(record.hash,'hex'));};
-export function upsertPromoter(p){const previous=p.id?promoters.get(p.id):null;const credential=p.password?hashPassword(p.password):previous?.credential||null;const x={id:p.id||crypto.randomUUID(),role:p.role||previous?.role||'PROMOTER',status:p.status||previous?.status||'ACTIVE',areaPromoterId:p.areaPromoterId??previous?.areaPromoterId??null,mobile:p.mobile||previous?.mobile||null,name:p.name||previous?.name||'Partner',credential,...previous,...p,password:undefined,updatedAt:now()};delete x.password;promoters.set(x.id,x);return sanitize(x);}
+export function upsertPromoter(p){
+ const previous=p.id?promoters.get(p.id):null;
+ const credential=p.password
+   ?hashPassword(p.password)
+   :previous?.credential||null;
+ const x={
+   id:p.id||crypto.randomUUID(),
+   role:String(p.role||previous?.role||'PROMOTER').toUpperCase(),
+   status:String(p.status||previous?.status||'ACTIVE').toUpperCase(),
+   areaPromoterId:p.areaPromoterId??previous?.areaPromoterId??null,
+   areaId:p.areaId??previous?.areaId??null,
+   mobile:p.mobile||previous?.mobile||null,
+   name:p.name||previous?.name||'Partner',
+   credential,
+   createdAt:previous?.createdAt||now(),
+   ...previous,
+   ...p,
+   updatedAt:now(),
+ };
+ x.role=String(x.role||'PROMOTER').toUpperCase();
+ x.status=String(x.status||'ACTIVE').toUpperCase();
+ delete x.password;
+ promoters.set(x.id,x);
+ return sanitize(x);
+}
 export function updatePromoterProfile(actorId,patch={}){
  const actor=promoters.get(actorId);
  if(!actor)return null;
@@ -23,11 +47,91 @@ export function updatePromoterProfile(actorId,patch={}){
  return sanitize(actor);
 }
 export function partnerLogin({mobile,password}){const actor=[...promoters.values()].find(x=>x.mobile===mobile&&x.status==='ACTIVE');if(!actor||!verifyPassword(password,actor.credential))return null;const token=crypto.randomBytes(32).toString('hex');const session={token,actorId:actor.id,role:actor.role,expiresAt:new Date(Date.now()+12*60*60*1000).toISOString(),createdAt:now()};sessions.set(token,session);return {token,expiresAt:session.expiresAt,partner:sanitize(actor)};}
-export function authenticatePartner(header){const token=String(header||'').replace(/^Bearer\s+/i,'');const s=sessions.get(token);if(!s||new Date(s.expiresAt)<=new Date()){if(token)sessions.delete(token);return null;}const actor=promoters.get(s.actorId);return actor?sanitize(actor):null;}
+export function authenticatePartner(header){const token=String(header||'').replace(/^Bearer\s+/i,'');const s=sessions.get(token);if(!s||new Date(s.expiresAt)<=new Date()){if(token)sessions.delete(token);return null;}const actor=promoters.get(s.actorId);return actor&&actor.status==='ACTIVE'?sanitize(actor):null;}
 export function partnerLogout(header){const token=String(header||'').replace(/^Bearer\s+/i,'');return sessions.delete(token);}
 export function linkDriver({promoterId,areaPromoterId=null,driverId}){const x={id:crypto.randomUUID(),promoterId,areaPromoterId,driverId,createdAt:now()};links.set(driverId,x);return clone(x);}
 export function getDriverPartnerLink(driverId){const x=links.get(driverId);return x?clone(x):null;}
 export function getPromoter(actorId){const x=promoters.get(actorId);return x?sanitize(x):null;}
+
+export function updatePromoterStatus(
+ actorId,
+ {status,reason=null,reviewedBy=null}={},
+){
+ const actor=promoters.get(actorId);
+ if(!actor)return null;
+ const normalized=String(status||'').toUpperCase();
+ if(!['ACTIVE','SUSPENDED','TERMINATED'].includes(normalized)){
+   throw new Error('invalid_partner_status');
+ }
+ if(actor.status==='TERMINATED'&&normalized!=='TERMINATED'){
+   throw new Error('terminated_partner_cannot_be_reactivated');
+ }
+ if(
+   ['SUSPENDED','TERMINATED'].includes(normalized) &&
+   !String(reason||'').trim()
+ ){
+   throw new Error('status_change_reason_required');
+ }
+ const changedAt=now();
+ actor.statusHistory=Array.isArray(actor.statusHistory)
+   ?actor.statusHistory
+   :[];
+ actor.statusHistory.unshift({
+   from:actor.status||'ACTIVE',
+   to:normalized,
+   reason:String(reason||'').trim()||null,
+   reviewedBy,
+   changedAt,
+ });
+ actor.status=normalized;
+ actor.statusReason=String(reason||'').trim()||null;
+ actor.statusChangedBy=reviewedBy;
+ actor.statusChangedAt=changedAt;
+ actor.updatedAt=changedAt;
+ return sanitize(actor);
+}
+
+export function assignPromoterToArea(
+ promoterId,
+ {areaPromoterId,areaId=null,reason=null,reviewedBy=null}={},
+){
+ const promoter=promoters.get(promoterId);
+ if(!promoter||promoter.role!=='PROMOTER')return null;
+ const area=promoters.get(areaPromoterId);
+ if(
+   !area ||
+   area.role!=='AREA_PROMOTER' ||
+   area.status!=='ACTIVE'
+ ){
+   throw new Error('active_area_promoter_required');
+ }
+ const changedAt=now();
+ promoter.assignmentHistory=Array.isArray(promoter.assignmentHistory)
+   ?promoter.assignmentHistory
+   :[];
+ promoter.assignmentHistory.unshift({
+   fromAreaPromoterId:promoter.areaPromoterId||null,
+   toAreaPromoterId:area.id,
+   reason:String(reason||'').trim()||null,
+   reviewedBy,
+   changedAt,
+ });
+ promoter.areaPromoterId=area.id;
+ promoter.areaId=areaId||area.areaId||promoter.areaId||null;
+ promoter.updatedAt=changedAt;
+ return sanitize(promoter);
+}
+
+export function updateLinkedDriversArea(promoterId,areaPromoterId){
+ const affected=[];
+ for(const link of links.values()){
+   if(link.promoterId!==promoterId)continue;
+   link.areaPromoterId=areaPromoterId||null;
+   link.updatedAt=now();
+   affected.push(link.driverId);
+ }
+ return affected;
+}
 export function listPromoters(){return [...promoters.values()].map(sanitize);}
 export function scopedDriverIds(actorId){const actor=promoters.get(actorId);if(!actor)return[];return [...links.values()].filter(x=>actor.role==='AREA_PROMOTER'?x.areaPromoterId===actorId:x.promoterId===actorId).map(x=>x.driverId);}
 export function addCoachingLog(input){const x={id:crypto.randomUUID(),type:'COACHING',status:'SENT',createdAt:now(),...input};coaching.unshift(x);return clone(x);}

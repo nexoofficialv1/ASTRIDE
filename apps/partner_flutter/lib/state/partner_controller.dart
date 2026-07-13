@@ -27,8 +27,10 @@ class PartnerController extends ChangeNotifier {
   bool get mustChangePassword =>
       session?.mustChangePassword == true;
   PartnerStrings get strings => PartnerStrings(languageCode);
-  bool get isPromoter => session?.role == 'PROMOTER';
-  bool get isAreaPromoter => session?.role == 'AREA_PROMOTER';
+  String get effectiveRole =>
+      '${profile['role'] ?? session?.role ?? ''}'.trim().toUpperCase();
+  bool get isPromoter => effectiveRole == 'PROMOTER';
+  bool get isAreaPromoter => effectiveRole == 'AREA_PROMOTER';
 
   Future<void> bootstrap() async {
     languageCode = await store.readLanguage();

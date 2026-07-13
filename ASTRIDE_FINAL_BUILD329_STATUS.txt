@@ -1,0 +1,16 @@
+ASTRIDE FINAL MARKET TEST BUILD 329
+
+Fixes:
+- Promoter and Area Promoter Suspend, Reactivate and permanent Terminate
+- Mandatory reason for Suspend and Terminate
+- Promoter assignment under an active Area Promoter
+- Existing linked Drivers inherit reassigned Area Promoter
+- Driver Suspend requires reason
+- Suspended approved Driver can be restored using Lift Suspension & Approve
+- Admin final approval checklist shows exactly what is pending
+- Promoter App always exposes Add Driver for PROMOTER role
+- Area Promoter cannot add Driver
+
+Deploy backend/admin ZIP first, recycle Application Pool, then build mobile:
+Version 3.16.0
+Build 329

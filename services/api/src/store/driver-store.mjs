@@ -197,6 +197,8 @@ export function getDriverApprovalSummary(driverId){
     canAreaApprove:areaPromoterAssigned&&flow.areaPromoter?.status!=='APPROVED'&&promoterApproved&&allDocumentsUploaded,
     canAdminApprove:promoterApproved&&areaApproved&&documentsFinalApproved,
     canAdminApproveWithBypass:promoterApproved&&!areaApproved&&documentsFinalApproved,
+    suspended:Boolean(driver.suspended||driver.status==='SUSPENDED'),
+    canLiftSuspension:Boolean((driver.suspended||driver.status==='SUSPENDED')&&flow.admin?.status==='APPROVED'&&documentsFinalApproved),
     stage:!promoterAssigned?'PROMOTER_ASSIGNMENT_REQUIRED':driver.approved?'ADMIN_APPROVED':flow.areaPromoter?.status==='APPROVED'?'AREA_APPROVED':flow.promoter?.status==='APPROVED'?'PROMOTER_APPROVED':allDocumentsUploaded?'DOCUMENTS_COMPLETE':'DOCUMENTS_PENDING',
   };
 }
@@ -312,6 +314,73 @@ export function reviewDriverStage(
   driver.reviewedAt=reviewedAt;
   driver.updatedAt=reviewedAt;
   return structuredClone(driver);
+}
+
+
+export function suspendDriver(
+ driverId,
+ {reason,actorId=null}={},
+){
+ const driver=getDriverProfile(driverId);
+ if(!driver)return null;
+ const clean=String(reason||'').trim();
+ if(!clean)throw new Error('suspension_reason_required');
+ const changedAt=new Date().toISOString();
+ driver.suspension={
+   active:true,
+   reason:clean,
+   suspendedBy:actorId,
+   suspendedAt:changedAt,
+   previousStatus:driver.status,
+   previouslyApproved:Boolean(driver.approved),
+ };
+ driver.status='SUSPENDED';
+ driver.approved=false;
+ driver.suspended=true;
+ driver.online=false;
+ driver.reviewRemarks=clean;
+ driver.updatedAt=changedAt;
+ return structuredClone(driver);
+}
+
+export function liftDriverSuspension(
+ driverId,
+ {reason=null,actorId=null}={},
+){
+ const driver=getDriverProfile(driverId);
+ if(!driver)return null;
+ if(!driver.suspended&&driver.status!=='SUSPENDED'){
+   throw new Error('driver_is_not_suspended');
+ }
+ const flow=ensureApprovalFlow(driver);
+ const verification=getDriverVerificationSummary(driverId);
+ const summary=getDriverApprovalSummary(driverId);
+ const changedAt=new Date().toISOString();
+ const restoreApproved=
+   flow.admin?.status==='APPROVED' &&
+   verification.readyForApproval;
+
+ driver.suspended=false;
+ driver.online=false;
+ driver.approved=restoreApproved;
+ driver.status=restoreApproved
+   ?'APPROVED'
+   :summary.areaApproved
+     ?'AREA_APPROVED'
+     :summary.promoterApproved
+       ?'PROMOTER_APPROVED'
+       :summary.allDocumentsUploaded
+         ?'DOCUMENTS_COMPLETE'
+         :'DRAFT';
+ driver.suspension={
+   ...(driver.suspension||{}),
+   active:false,
+   liftedAt:changedAt,
+   liftedBy:actorId,
+   liftReason:String(reason||'').trim()||null,
+ };
+ driver.updatedAt=changedAt;
+ return structuredClone(driver);
 }
 
 export function reviewDriver(driverId,{status,remarks}){

@@ -48,6 +48,19 @@ class _PartnerShellState extends State<PartnerShell> {
         duration: const Duration(milliseconds: 220),
         child: KeyedSubtree(key: ValueKey(index), child: pages[index]),
       ),
+      floatingActionButton: widget.c.isPromoter
+          ? FloatingActionButton.extended(
+              onPressed: () => setState(() => index = 1),
+              icon: const Icon(Icons.person_add_alt_1_rounded),
+              label: Text(
+                widget.c.languageCode == 'bn'
+                    ? 'ড্রাইভার যোগ করুন'
+                    : widget.c.languageCode == 'hi'
+                        ? 'ड्राइवर जोड़ें'
+                        : 'Add Driver',
+              ),
+            )
+          : null,
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
         onDestinationSelected: (v) => setState(() => index = v),
