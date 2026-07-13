@@ -1,7 +1,7 @@
 name: astride_partner
 description: ASTRIDE Promoter and Area Promoter mobile application
 publish_to: none
-version: 3.14.0+317
+version: 3.14.0+318
 environment:
   sdk: ">=3.4.0 <4.0.0"
 dependencies:

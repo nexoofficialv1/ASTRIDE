@@ -1,0 +1,17 @@
+ASTRIDE BUILD 318 COMPILE FIX
+
+Fixed:
+- Partner main.dart invalid const SessionStore()
+- Partner change-password screen was imported but never routed
+- Replaced Color.withValues with Flutter-compatible withOpacity
+- Removed DropdownButtonFormField deprecated value warning
+- Replaced deprecated Share.share API
+- Version: 3.14.0+318
+
+Apply:
+  cp ~/storage/shared/Download/ASTRIDE_BUILD318_COMPILE_FIX.zip ~/ASTRIDE_MASTER/
+  cd ~/ASTRIDE_MASTER
+  unzip -o ASTRIDE_BUILD318_COMPILE_FIX.zip
+  git add .
+  git commit -m "Fix Build 318 Flutter compile issues"
+  git push

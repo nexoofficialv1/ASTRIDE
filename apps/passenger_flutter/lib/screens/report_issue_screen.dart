@@ -54,7 +54,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
             ),
             const SizedBox(height: 14),
             DropdownButtonFormField<String>(
-              value: category,
+              initialValue: category,
               decoration: const InputDecoration(
                 labelText: 'Issue category',
                 prefixIcon: Icon(Icons.category_outlined),

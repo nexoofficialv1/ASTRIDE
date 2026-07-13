@@ -165,9 +165,14 @@ class _ReferralScreenState extends State<ReferralScreen> {
                         FilledButton.icon(
                           onPressed: code.isEmpty
                               ? null
-                              : () => Share.share(
-                                    'Join ASTRIDE with my referral code $code\n$link',
-                                  ),
+                              : () async {
+                                  await SharePlus.instance.share(
+                                    ShareParams(
+                                      text:
+                                          'Join ASTRIDE with my referral code $code\n$link',
+                                    ),
+                                  );
+                                },
                           icon: const Icon(Icons.share_rounded),
                           label: const Text('Share invite'),
                         ),
