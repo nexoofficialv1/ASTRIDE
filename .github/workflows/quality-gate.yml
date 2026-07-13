@@ -16,7 +16,7 @@ jobs:
         with:
           channel: stable
           cache: true
-      - run: mobile_build/scripts/bootstrap_mobile.sh ${{ matrix.app }}
+      - run: bash mobile_build/scripts/bootstrap_mobile.sh ${{ matrix.app }}
       - working-directory: apps/${{ matrix.app }}
         run: flutter analyze
       - working-directory: apps/${{ matrix.app }}

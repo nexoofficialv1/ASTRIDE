@@ -1,0 +1,16 @@
+ASTRIDE BUILD 321 — MOBILE QUALITY GATE PERMISSION FIX
+
+Root cause:
+The Mobile Quality Gate workflow directly executed:
+  mobile_build/scripts/bootstrap_mobile.sh <app>
+
+GitHub did not preserve the executable bit, causing:
+  Permission denied
+  Exit code 126
+
+Fix:
+All workflows now run:
+  bash mobile_build/scripts/bootstrap_mobile.sh <app>
+
+Version:
+  3.14.0+321

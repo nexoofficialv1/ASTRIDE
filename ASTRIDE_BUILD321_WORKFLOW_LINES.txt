@@ -1,0 +1,3 @@
+.github/workflows/quality-gate.yml:19: - run: bash mobile_build/scripts/bootstrap_mobile.sh ${{ matrix.app }}
+.github/workflows/android-compile-check.yml:25: run: bash mobile_build/scripts/bootstrap_mobile.sh ${{ matrix.app }}
+.github/workflows/android-release.yml:84: run: bash mobile_build/scripts/bootstrap_mobile.sh "${{ matrix.app }}"
