@@ -219,12 +219,39 @@ class DriverController extends ChangeNotifier {
       api.getJson(
         '/v1/driver-profiles/${session!.userId}/documents',
       ),
+      api.getJson(
+        '/v1/driver-profiles/${session!.userId}/wallet',
+      ),
     ]);
     profile = Map<String, dynamic>.from(output[0]);
     documents = ((output[1]['items'] ?? const []) as List)
         .whereType<Map>()
         .map((item) => item.cast<String, dynamic>())
         .toList();
+    final wallet = output[2];
+    walletBalance =
+        (num.tryParse('${wallet['balancePaise'] ?? 0}') ?? 0) /
+            100;
+    final transactions =
+        ((wallet['transactions'] ?? const []) as List)
+            .whereType<Map>();
+    final today = DateTime.now();
+    todayEarnings = transactions
+        .where((item) {
+          final created =
+              DateTime.tryParse('${item['createdAt']}')?.toLocal();
+          return created != null &&
+              created.year == today.year &&
+              created.month == today.month &&
+              created.day == today.day;
+        })
+        .fold<double>(
+          0,
+          (total, item) =>
+              total +
+              ((num.tryParse('${item['netPaise'] ?? 0}') ?? 0) /
+                  100),
+        );
     approval =
         '${profile['status'] ?? profile['approvalStatus'] ?? 'PENDING'}';
     onboardingStep = '${profile['onboardingStep'] ?? 'PROFILE'}';
@@ -381,6 +408,18 @@ class DriverController extends ChangeNotifier {
     }
 
     try {
+      final activeResponse =
+          await api.getJson('/v1/driver/active-ride');
+      final assigned = activeResponse['booking'];
+      if (assigned is Map) {
+        activeRide = assigned.cast<String, dynamic>();
+        request = null;
+        _requestPoller?.cancel();
+        _requestPoller = null;
+        notifyListeners();
+        return;
+      }
+
       final response = await api.getJson('/v1/driver/requests');
       final items = ((response['items'] ?? const []) as List)
           .whereType<Map>()
@@ -519,6 +558,82 @@ class DriverController extends ChangeNotifier {
       if (online) _startRequestPolling();
     }
     notifyListeners();
+  }
+
+  Future<void> cancelActiveRide(String reason) async {
+    if (activeRide == null) return;
+    final cleanReason = reason.trim();
+    if (cleanReason.isEmpty) {
+      throw ApiException('Select or write a cancellation reason.');
+    }
+
+    busy = true;
+    error = null;
+    notifyListeners();
+
+    try {
+      final bookingId = '${activeRide!['id']}';
+      await api.postJson(
+        '/v1/bookings/$bookingId/driver-cancel',
+        {'reason': cleanReason},
+      );
+      activeRide = null;
+      request = null;
+      if (online) _startRequestPolling();
+    } catch (e) {
+      error = e.toString();
+      rethrow;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<Map<String, dynamic>> submitSupportIssue({
+    required String category,
+    required String description,
+    String? rideId,
+  }) =>
+      api.postJson('/v1/support/issues', {
+        'category': category,
+        'description': description.trim(),
+        if (rideId != null && rideId.isNotEmpty)
+          'rideId': rideId,
+      });
+
+  Future<Map<String, dynamic>> triggerSos({
+    String? bookingId,
+  }) async {
+    if (session == null) {
+      throw ApiException('Please sign in before using SOS.');
+    }
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      throw ApiException('Turn on location services to send SOS.');
+    }
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      throw ApiException('Location permission is required for SOS.');
+    }
+    final position = await Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        timeLimit: Duration(seconds: 15),
+      ),
+    );
+    return api.postJson('/v1/safety/sos', {
+      'actorType': 'driver',
+      'actorId': session!.userId,
+      'bookingId': bookingId ?? activeRide?['id'],
+      'location': {
+        'lat': position.latitude,
+        'lng': position.longitude,
+        'accuracy': position.accuracy,
+      },
+    });
   }
 
   Future<void> requestSettlement(double amount) async {

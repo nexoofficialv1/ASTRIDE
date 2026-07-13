@@ -115,3 +115,51 @@ html,body{max-width:100%;overflow-x:hidden}
 @media(max-width:760px){
   .approval-checklist{grid-template-columns:1fr}
 }
+
+
+/* Build 330: live dispatch map and manual assignment */
+.dispatch-panel{margin-bottom:18px}
+.dispatch-summary{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:10px;
+  margin:12px 0;
+}
+.dispatch-summary>div{
+  display:flex;
+  flex-direction:column;
+  gap:5px;
+  padding:12px;
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:#f8fbff;
+}
+.dispatch-summary small{color:var(--muted);font-weight:700}
+.dispatch-map{
+  width:100%;
+  height:420px;
+  border:1px solid var(--border);
+  border-radius:18px;
+  overflow:hidden;
+  margin:12px 0 18px;
+  background:#eef3f7;
+}
+.map-fallback{padding:24px;line-height:1.7}
+.assigned-driver-strip{
+  padding:12px 14px;
+  margin-bottom:14px;
+  border-radius:14px;
+  background:#eaf2ff;
+}
+.audit-mini{margin-top:16px}
+.audit-mini>div{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  padding:8px 0;
+  border-bottom:1px solid var(--border);
+}
+@media(max-width:760px){
+  .dispatch-summary{grid-template-columns:1fr}
+  .dispatch-map{height:340px}
+}

@@ -18,6 +18,46 @@ class PassengerShell extends StatefulWidget {
 class _PassengerShellState extends State<PassengerShell> {
   int index = 0;
 
+  Future<void> _triggerSos(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Send emergency SOS?'),
+        content: const Text(
+          'Your live location and active ride details will be sent '
+          'to the ASTRIDE Safety Team.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Send SOS'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final incident = await widget.controller.triggerSos();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'SOS sent. Incident ID: ${incident['id'] ?? '-'}',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$error')),
+      );
+    }
+  }
+
   void openBooking() {
     Navigator.push(
       context,
@@ -30,7 +70,11 @@ class _PassengerShellState extends State<PassengerShell> {
   @override
   Widget build(BuildContext context) {
     final pages = [
-      AstrideHomeScreen(t: widget.controller.t, onBook: openBooking),
+      AstrideHomeScreen(
+        t: widget.controller.t,
+        onBook: openBooking,
+        onSos: () => _triggerSos(context),
+      ),
       RideHistoryScreen(controller: widget.controller),
       ProfileScreen(controller: widget.controller),
     ];

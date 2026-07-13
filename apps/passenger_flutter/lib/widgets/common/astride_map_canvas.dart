@@ -18,6 +18,7 @@ class AstrideMapCanvas extends StatelessWidget {
     this.interactive = true,
     this.showRoute = true,
     this.showDrivers = false,
+    this.driverPoints = const [],
   });
 
   final MapController? controller;
@@ -32,6 +33,7 @@ class AstrideMapCanvas extends StatelessWidget {
   /// Backwards-compatible flags used by existing ride-status screens.
   final bool showRoute;
   final bool showDrivers;
+  final List<LatLng> driverPoints;
 
   @override
   Widget build(BuildContext context) {
@@ -67,6 +69,17 @@ class AstrideMapCanvas extends StatelessWidget {
             color: AstrideColors.orange,
           ),
         ),
+      if (showDrivers)
+        for (final point in driverPoints)
+          Marker(
+            point: point,
+            width: 44,
+            height: 44,
+            child: const _MapPin(
+              icon: Icons.electric_rickshaw_rounded,
+              color: AstrideColors.green,
+            ),
+          ),
     ];
 
     return FlutterMap(

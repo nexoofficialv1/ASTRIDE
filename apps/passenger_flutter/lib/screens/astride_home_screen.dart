@@ -12,10 +12,12 @@ class AstrideHomeScreen extends StatefulWidget {
     super.key,
     required this.t,
     required this.onBook,
+    required this.onSos,
   });
 
   final String Function(String) t;
   final VoidCallback onBook;
+  final Future<void> Function() onSos;
 
   @override
   State<AstrideHomeScreen> createState() => _AstrideHomeScreenState();
@@ -150,7 +152,7 @@ class _AstrideHomeScreenState extends State<AstrideHomeScreen> {
                           icon: Icons.sos_rounded,
                           label: 'SOS',
                           danger: true,
-                          onTap: () {},
+                          onTap: () => widget.onSos(),
                         ),
                       ],
                     ),

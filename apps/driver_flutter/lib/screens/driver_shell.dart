@@ -7,6 +7,7 @@ import 'earnings/driver_earnings_screen.dart';
 import 'driver_profile_screen.dart';
 import 'performance/driver_performance_screen.dart';
 import 'new_ride_request_screen.dart';
+import 'tools/driver_tools_screen.dart';
 
 class DriverShell extends StatefulWidget {
   const DriverShell({super.key, required this.controller});
@@ -15,10 +16,58 @@ class DriverShell extends StatefulWidget {
 }
 class _DriverShellState extends State<DriverShell> {
   int index = 0;
+  String? lastRideId;
+
+  @override
+  void initState() {
+    super.initState();
+    lastRideId = widget.controller.activeRide?['id']?.toString();
+    widget.controller.addListener(_syncAssignedRide);
+  }
+
+  void _syncAssignedRide() {
+    final rideId =
+        widget.controller.activeRide?['id']?.toString();
+    if (!mounted) return;
+    if (rideId != null && rideId != lastRideId) {
+      lastRideId = rideId;
+      setState(() => index = 1);
+    } else if (rideId == null) {
+      lastRideId = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_syncAssignedRide);
+    super.dispose();
+  }
+
   @override Widget build(BuildContext context) {
     final c = widget.controller;
     final pages = [
-      AstrideDriverDashboard(controller:c),
+      AstrideDriverDashboard(
+        controller: c,
+        onNavigate: (value) => setState(() => index = value),
+        onSupport: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => DriverSupportScreen(controller: c),
+          ),
+        ),
+        onDocuments: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => DriverDocumentsScreen(controller: c),
+          ),
+        ),
+        onSafety: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => DriverSafetyScreen(controller: c),
+          ),
+        ),
+      ),
       c.activeRide == null ? RideHistoryDriverScreen(controller:c) : ActiveRideScreen(controller:c),
       DriverEarningsScreen(controller:c),
       DriverPerformanceScreen(controller:c),

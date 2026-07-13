@@ -1,4 +1,4 @@
-const state={api:localStorage.apiBase||'http://localhost:3333',token:localStorage.adminToken||'',lang:localStorage.adminLang||'en',page:'dashboard',cache:{}};
+const state={api:localStorage.apiBase||'http://localhost:3333',token:localStorage.adminToken||'',lang:localStorage.adminLang||'en',page:'dashboard',cache:{},dispatchTimer:null,dispatchMap:null};
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const text={
 en:{dashboard:'Dashboard',rides:'Live Rides',drivers:'Drivers',payments:'Payments',settlements:'Settlements',safety:'Safety & SOS',complaints:'Complaints',notifications:'Notifications',providers:'Provider Configuration',settings:'Service Controls',audit:'Audit & Storage',controlCenter:'Operations Control Center',internalOnly:'Secure internal administration only',apiBase:'API base URL',username:'Username',password:'Password',signIn:'Sign in',productionWarning:'Use production credentials. Demo passwords are not accepted in production mode.',internalMonitoring:'Internal monitoring',refresh:'Refresh',logout:'Logout',save:'Save changes',test:'Test provider',reconcile:'Reconcile payments',fareManagement:'Fare Management',dynamicPricing:'Dynamic Pricing',nightService:'Night Service',zoneManager:'Zone Manager',promoterManagement:'Promoter Management',compensation:'Compensation Center',saferideAdmin:'SafeRide',partnerSettlements:'Partner Settlements',businessOperations:'Business Operations',campaigns:'Offers & Campaigns',referrals:'Refer & Earn'},
@@ -9,6 +9,124 @@ const tr=k=>text[state.lang]?.[k]||text.en[k]||k;
 const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 function toast(msg){const el=$('#toast');el.textContent=msg;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,2400)}
 async function api(path,options={}){const headers={'content-type':'application/json',authorization:`Bearer ${state.token}`,...(options.headers||{})};const r=await fetch(state.api+path,{...options,headers});let body={};try{body=await r.json()}catch{}if(r.status===401){logout();throw Error('Session expired')}if(!r.ok)throw Error(body.message||body.error||`HTTP ${r.status}`);return body}
+async function ensureLeaflet(){
+  if(window.L)return window.L;
+  if(!document.querySelector('link[data-leaflet]')){
+    const link=document.createElement('link');
+    link.rel='stylesheet';
+    link.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    link.dataset.leaflet='1';
+    document.head.appendChild(link);
+  }
+  await new Promise((resolve,reject)=>{
+    const existing=document.querySelector('script[data-leaflet]');
+    if(existing){
+      if(window.L)return resolve();
+      existing.addEventListener('load',resolve,{once:true});
+      existing.addEventListener('error',reject,{once:true});
+      return;
+    }
+    const script=document.createElement('script');
+    script.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.dataset.leaflet='1';
+    script.onload=resolve;
+    script.onerror=reject;
+    document.head.appendChild(script);
+  });
+  return window.L;
+}
+const pointOk=p=>p&&Number.isFinite(Number(p.lat))&&Number.isFinite(Number(p.lng));
+async function drawDispatchMap(data){
+  const target=$('#dispatchMap');
+  if(!target)return;
+  try{
+    const L=await ensureLeaflet();
+    if(state.dispatchMap){
+      state.dispatchMap.remove();
+      state.dispatchMap=null;
+    }
+    const pickup=data.booking?.pickup;
+    const destination=data.booking?.destination;
+    const center=pointOk(pickup)
+      ?[Number(pickup.lat),Number(pickup.lng)]
+      :[23.2196,88.3628];
+    const map=L.map(target).setView(center,14);
+    state.dispatchMap=map;
+    L.tileLayer(
+      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      {maxZoom:19,attribution:'© OpenStreetMap contributors'},
+    ).addTo(map);
+    const bounds=[];
+    if(pointOk(pickup)){
+      const p=[Number(pickup.lat),Number(pickup.lng)];
+      bounds.push(p);
+      L.marker(p).addTo(map).bindPopup(
+        `<b>Passenger pickup</b><br>${esc(data.booking.pickupAddress||data.booking.passengerId||'Searching passenger')}`,
+      );
+    }
+    if(pointOk(destination)){
+      const p=[Number(destination.lat),Number(destination.lng)];
+      bounds.push(p);
+      L.circleMarker(p,{radius:9,color:'#f97316',fillOpacity:.9})
+        .addTo(map)
+        .bindPopup(`<b>Destination</b><br>${esc(data.booking.destinationAddress||'Pinned destination')}`);
+    }
+    for(const driver of data.candidates||[]){
+      if(!pointOk(driver.location))continue;
+      const p=[Number(driver.location.lat),Number(driver.location.lng)];
+      bounds.push(p);
+      L.circleMarker(p,{radius:9,color:'#16a34a',fillOpacity:.9})
+        .addTo(map)
+        .bindPopup(
+          `<b>${esc(driver.fullName||driver.id)}</b><br>`+
+          `${esc(driver.vehicle?.number||'Vehicle number unavailable')}<br>`+
+          `${esc(driver.distanceToPickupKm)} km from pickup`,
+        );
+    }
+    if(pointOk(data.assignedDriver?.location)){
+      const p=[
+        Number(data.assignedDriver.location.lat),
+        Number(data.assignedDriver.location.lng),
+      ];
+      bounds.push(p);
+      L.circleMarker(p,{radius:11,color:'#1d4ed8',fillOpacity:1})
+        .addTo(map)
+        .bindPopup(`<b>Assigned Driver</b><br>${esc(data.assignedDriver.fullName||data.assignedDriver.id)}`);
+    }
+    if(bounds.length>1)map.fitBounds(bounds,{padding:[30,30]});
+    setTimeout(()=>map.invalidateSize(),120);
+  }catch(error){
+    target.innerHTML=`<div class="map-fallback"><b>Map could not load.</b><br>Pickup: ${esc(JSON.stringify(data.booking?.pickup||{}))}<br>Nearby eligible drivers: ${esc((data.candidates||[]).length)}</div>`;
+  }
+}
+function dispatchPanel(data){
+  const booking=data.booking||{};
+  const candidates=data.candidates||[];
+  const allowed=booking.status==='SEARCHING';
+  const events=(data.events||[]).slice(-5).reverse();
+  return `<div class="panel-header">
+    <div><h3>Live Dispatch Map</h3><p class="muted"><span class="mono">${esc(booking.id)}</span> · ${badge(booking.status)}</p></div>
+    <button class="secondary" id="closeDispatch">Close</button>
+  </div>
+  <div class="dispatch-summary">
+    <div><small>Pickup</small><b>${esc(booking.pickupAddress||JSON.stringify(booking.pickup||{}))}</b></div>
+    <div><small>Destination</small><b>${esc(booking.destinationAddress||JSON.stringify(booking.destination||{}))}</b></div>
+    <div><small>Search radius</small><b>${esc(data.searchRadiusKm||0)} km</b></div>
+    <div><small>Eligible free drivers</small><b>${esc(candidates.length)}</b></div>
+  </div>
+  <div id="dispatchMap" class="dispatch-map"></div>
+  ${data.assignedDriver?`<div class="assigned-driver-strip"><b>Assigned:</b> ${esc(data.assignedDriver.fullName||data.assignedDriver.id)} · ${esc(data.assignedDriver.vehicle?.number||'-')}</div>`:''}
+  <div class="panel-header"><h3>Nearby eligible drivers</h3>${allowed&&candidates.length?`<button class="primary" id="autoAssignNearest">Auto assign nearest</button>`:''}</div>
+  ${candidates.length?table(candidates,[
+    ['Driver',x=>`<b>${esc(x.fullName||x.id)}</b><div class="mono muted">${esc(x.id)}</div>`],
+    ['Vehicle',x=>esc(x.vehicle?.number||'-')],
+    ['Distance',x=>`${esc(x.distanceToPickupKm)} km`],
+    ['Rating',x=>esc(x.rating||5)],
+    ['Action',x=>allowed?`<button class="secondary manual-assign-driver" data-driver="${esc(x.id)}">Assign</button>`:'-'],
+  ]):'<div class="empty">No eligible free verified Driver is currently inside the search radius.</div>'}
+  ${booking.driverCancellationHistory?.length?`<div class="danger-strip"><b>Driver cancellations:</b> ${booking.driverCancellationHistory.map(x=>`${esc(x.driverId)} — ${esc(x.reason)}`).join('<br>')}</div>`:''}
+  <div class="audit-mini"><h4>Latest ride events</h4>${events.map(x=>`<div><span>${esc(x.eventType)}</span><small>${esc(x.createdAt)}</small></div>`).join('')||'<p class="muted">No events</p>'}</div>`;
+}
 function badge(v){const s=String(v??'UNKNOWN'),c=/CAPTURED|COMPLETED|APPROVED|ONLINE|RESOLVED|DELIVERED|CASH_COLLECTED/i.test(s)?'good':/FAILED|REJECTED|SUSPENDED|OPEN|SOS|BLOCKED/i.test(s)?'bad':'warn';return `<span class="status ${c}">${esc(s)}</span>`}
 function fileHref(value){
   const url=String(value||'').trim();
@@ -59,10 +177,22 @@ function showApp(){
     loadPage(state.page);
   }
 }
-async function loadPage(page){state.page=page;translateShell();const c=$('#content');c.innerHTML='<div class="panel loading">Loading…</div>';try{const fn=views[page];c.innerHTML=await fn();wire(page);$('#connectionBadge').className='badge good';$('#connectionBadge').textContent='API Online'}catch(e){$('#connectionBadge').className='badge bad';$('#connectionBadge').textContent='API Error';c.innerHTML=`<div class="panel danger-strip"><h3>Unable to load</h3><p class="muted">${esc(e.message)}</p><button class="secondary" id="retry">Retry</button></div>`;$('#retry').onclick=()=>loadPage(page)}}
+async function loadPage(page){if(state.dispatchTimer){clearInterval(state.dispatchTimer);state.dispatchTimer=null}if(state.dispatchMap){state.dispatchMap.remove();state.dispatchMap=null}state.page=page;translateShell();const c=$('#content');c.innerHTML='<div class="panel loading">Loading…</div>';try{const fn=views[page];c.innerHTML=await fn();wire(page);$('#connectionBadge').className='badge good';$('#connectionBadge').textContent='API Online'}catch(e){$('#connectionBadge').className='badge bad';$('#connectionBadge').textContent='API Error';c.innerHTML=`<div class="panel danger-strip"><h3>Unable to load</h3><p class="muted">${esc(e.message)}</p><button class="secondary" id="retry">Retry</button></div>`;$('#retry').onclick=()=>loadPage(page)}}
 const views={
 async dashboard(){const d=await api('/v1/admin/dashboard');const labels={totalBookings:'Total bookings',liveRides:'Live rides',completedRides:'Completed',driversRegistered:'Drivers',driversOnline:'Online drivers',openComplaints:'Open complaints',paymentsCaptured:'Captured payments',pendingSettlements:'Pending settlements',openSos:'Open SOS',openRiskEvents:'Risk events'};return `<div class="cards">${Object.entries(d.cards).map(([k,v])=>`<div class="card"><small>${esc(labels[k]||k)}</small><strong>${esc(v)}</strong></div>`).join('')}</div><div class="grid"><div class="panel"><div class="panel-header"><h3>Operations</h3><small class="muted">${esc(d.generatedAt)}</small></div>${Object.entries(d.operations).map(([k,v])=>`<div class="switch-row"><span>${esc(k)}</span>${badge(v?'ON':'OFF')}</div>`).join('')}</div><div class="panel"><h3>Active providers</h3>${Object.entries(d.providers).map(([k,v])=>`<div class="switch-row"><span>${esc(k)}</span><b>${esc(v.active||'-')} · ${esc(v.mode||'')}</b></div>`).join('')}</div></div>`},
-async rides(){const d=await api('/v1/admin/rides');return `<div class="toolbar"><input id="q" placeholder="Search ride / passenger / driver"><select id="statusFilter"><option value="">All statuses</option>${[...new Set(d.items.map(x=>x.status))].map(x=>`<option>${esc(x)}</option>`).join('')}</select></div><div id="rideTable">${rideTable(d.items)}</div>`},
+async rides(){
+  const d=await api('/v1/admin/rides');
+  return `<div class="toolbar">
+    <input id="q" placeholder="Search ride / passenger / driver">
+    <select id="statusFilter">
+      <option value="">All statuses</option>
+      ${[...new Set(d.items.map(x=>x.status))].map(x=>`<option>${esc(x)}</option>`).join('')}
+    </select>
+    <button class="secondary" id="refreshLiveRides">Refresh</button>
+  </div>
+  <div id="rideDispatchPanel" class="panel dispatch-panel" hidden></div>
+  <div id="rideTable">${rideTable(d.items)}</div>`;
+},
 async drivers(){
   const [d,partnerData]=await Promise.all([api('/v1/admin/drivers'),api('/v1/admin/promoters')]);
   const online=new Map((d.availability||[]).map(x=>[x.driverId||x.id,x]));
@@ -279,11 +409,102 @@ function promoterTable(items,areas=[]){
   ]);
 }
 
-function rideTable(items){return table(items,[['Ride',x=>`<span class="mono">${esc(x.id)}</span>`],['Status',x=>badge(x.status)],['Passenger',x=>esc(x.passengerId)],['Driver',x=>esc(x.driverId||'-')],['Fare',x=>esc(x.fareEstimate?.amount||x.fareEstimate?.amountPaise/100||'-')],['Created',x=>esc(x.createdAt||'-')]])}
+function rideTable(items){return table(items,[['Ride',x=>`<span class="mono">${esc(x.id)}</span><div class="muted compact-note">${esc(x.pickupAddress||'Pickup coordinates recorded')}</div>`],['Status',x=>badge(x.status)],['Passenger',x=>esc(x.passengerId)],['Driver',x=>esc(x.driverId||'-')],['Fare',x=>esc(x.fareEstimate?.amount||x.fareEstimate?.amountPaise/100||'-')],['Created',x=>esc(x.createdAt||'-')],['Dispatch',x=>`<button class="secondary open-dispatch" data-id="${esc(x.id)}">Map & Assign</button>`]])}
 function providerSelect(key,label,opts,current){return `<label class="field"><span>${label}</span><select data-provider="${key}">${opts.map(x=>`<option value="${x}" ${current.active===x?'selected':''}>${x}</option>`).join('')}</select></label><label class="field"><span>${label} mode</span><select data-mode="${key}"><option value="test" ${current.mode==='test'?'selected':''}>test</option><option value="live" ${current.mode==='live'?'selected':''}>live</option></select></label>`}
 function toggle(k,v){return `<div class="switch-row"><span>${esc(k)}</span><label class="switch"><input type="checkbox" data-op="${esc(k)}" ${v?'checked':''}><span></span></label></div>`}
 function wire(page){if(page==='referrals'&&$('#refreshReferrals'))$('#refreshReferrals').onclick=()=>loadPage('referrals');
-if(page==='rides'){const all=()=>api('/v1/admin/rides').then(d=>{const q=$('#q').value.toLowerCase(),s=$('#statusFilter').value;$('#rideTable').innerHTML=rideTable(d.items.filter(x=>(!s||x.status===s)&&JSON.stringify(x).toLowerCase().includes(q))) });$('#q').oninput=all;$('#statusFilter').onchange=all}
+if(page==='rides'){
+  let selectedRideId=null;
+  const bindRideButtons=()=>{
+    $$('.open-dispatch').forEach(button=>{
+      button.onclick=()=>openDispatch(button.dataset.id);
+    });
+  };
+  const refreshTable=async()=>{
+    const d=await api('/v1/admin/rides');
+    const q=($('#q')?.value||'').toLowerCase();
+    const status=$('#statusFilter')?.value||'';
+    const items=(d.items||[]).filter(x=>
+      (!status||x.status===status)&&
+      JSON.stringify(x).toLowerCase().includes(q)
+    );
+    $('#rideTable').innerHTML=rideTable(items);
+    bindRideButtons();
+  };
+  const openDispatch=async rideId=>{
+    selectedRideId=rideId;
+    const panel=$('#rideDispatchPanel');
+    panel.hidden=false;
+    panel.innerHTML='<div class="loading">Loading live dispatch map…</div>';
+    try{
+      const data=await api(
+        `/v1/admin/rides/${encodeURIComponent(rideId)}/dispatch`,
+      );
+      if(selectedRideId!==rideId||state.page!=='rides')return;
+      panel.innerHTML=dispatchPanel(data);
+      await drawDispatchMap(data);
+      $('#closeDispatch').onclick=()=>{
+        selectedRideId=null;
+        panel.hidden=true;
+        panel.innerHTML='';
+        if(state.dispatchMap){
+          state.dispatchMap.remove();
+          state.dispatchMap=null;
+        }
+      };
+      $$('.manual-assign-driver').forEach(button=>{
+        button.onclick=async()=>{
+          try{
+            await api(
+              `/v1/admin/rides/${encodeURIComponent(rideId)}/assign`,
+              {
+                method:'POST',
+                body:JSON.stringify({
+                  driverId:button.dataset.driver,
+                }),
+              },
+            );
+            toast('Driver assigned successfully');
+            await refreshTable();
+            await openDispatch(rideId);
+          }catch(error){toast(error.message)}
+        };
+      });
+      const auto=$('#autoAssignNearest');
+      if(auto){
+        auto.onclick=async()=>{
+          try{
+            await api(
+              `/v1/bookings/${encodeURIComponent(rideId)}/match`,
+              {method:'POST',body:'{}'},
+            );
+            toast('Nearest eligible Driver assigned');
+            await refreshTable();
+            await openDispatch(rideId);
+          }catch(error){toast(error.message)}
+        };
+      }
+    }catch(error){
+      panel.innerHTML=`<div class="danger-strip"><h3>Dispatch data unavailable</h3><p>${esc(error.message)}</p></div>`;
+    }
+  };
+  $('#q').oninput=refreshTable;
+  $('#statusFilter').onchange=refreshTable;
+  $('#refreshLiveRides').onclick=async()=>{
+    await refreshTable();
+    if(selectedRideId)await openDispatch(selectedRideId);
+  };
+  bindRideButtons();
+  state.dispatchTimer=setInterval(()=>{
+    if(state.page!=='rides'){
+      clearInterval(state.dispatchTimer);
+      state.dispatchTimer=null;
+      return;
+    }
+    refreshTable();
+    if(selectedRideId)openDispatch(selectedRideId);
+  },5000);
+}
 if(page==='payments')$('#reconcileAll').onclick=async()=>{const r=await api('/v1/admin/payments/reconcile',{method:'POST',body:'{}'});toast(`Reconciled ${r.items.length} payment(s)`);loadPage(page)};
 if(page==='safety')$$('.resolve-sos').forEach(b=>b.onclick=async()=>{await api(`/v1/admin/sos/${b.dataset.id}`,{method:'PATCH',body:JSON.stringify({status:'RESOLVED',resolution:'Resolved from control console'})});toast('SOS resolved');loadPage(page)});
 if(page==='complaints')$$('.close-complaint').forEach(b=>b.onclick=async()=>{await api(`/v1/admin/complaints/${b.dataset.id}`,{method:'PATCH',body:JSON.stringify({status:'CLOSED'})});toast('Complaint closed');loadPage(page)});

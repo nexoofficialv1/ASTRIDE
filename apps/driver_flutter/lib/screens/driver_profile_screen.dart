@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import '../core/app_config.dart';
 import '../design/astride_theme.dart';
 import '../state/driver_controller.dart';
+import 'tools/driver_tools_screen.dart';
 
 class DriverProfileScreen extends StatelessWidget {
   const DriverProfileScreen({
@@ -188,11 +189,22 @@ class DriverProfileScreen extends StatelessWidget {
                     ),
                   ),
                   const Divider(height: 1),
-                  const ListTile(
-                    leading: Icon(Icons.support_agent_rounded),
-                    title: Text('Help & Support'),
-                    subtitle: Text('Contact ASTRIDE driver support'),
-                    trailing: Icon(Icons.chevron_right_rounded),
+                  ListTile(
+                    leading: const Icon(Icons.support_agent_rounded),
+                    title: const Text('Help & Support'),
+                    subtitle: const Text(
+                      'Contact ASTRIDE Driver Support',
+                    ),
+                    trailing:
+                        const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => DriverSupportScreen(
+                          controller: controller,
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),

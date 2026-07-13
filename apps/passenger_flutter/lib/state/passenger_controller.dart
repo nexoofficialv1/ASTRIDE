@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../core/app_locale.dart';
 import '../models/runtime_config.dart';
@@ -48,6 +49,7 @@ class PassengerController extends ChangeNotifier {
 
       if (session != null) {
         await refreshProfile();
+        await restoreActiveBooking();
 
         if ('${profile['fullName'] ?? ''}'.trim().isEmpty &&
             profileName.trim().isNotEmpty) {
@@ -259,6 +261,60 @@ class PassengerController extends ChangeNotifier {
       if (distanceKm != null) 'distanceKm': distanceKm,
     });
     notifyListeners();
+  }
+
+  Future<void> restoreActiveBooking() async {
+    if (session == null) return;
+    try {
+      final response = await api.getJson('/v1/passenger/active-booking');
+      final booking = response['booking'];
+      activeBooking = booking is Map
+          ? booking.cast<String, dynamic>()
+          : null;
+      notifyListeners();
+    } catch (_) {
+      // Do not block login when no active booking can be restored.
+    }
+  }
+
+  void resumeBooking(Map<String, dynamic> booking) {
+    activeBooking = Map<String, dynamic>.from(booking);
+    notifyListeners();
+  }
+
+  Future<Map<String, dynamic>> triggerSos({
+    String? bookingId,
+  }) async {
+    if (session == null) {
+      throw ApiException('Please sign in before using SOS.');
+    }
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      throw ApiException('Turn on location services to send SOS.');
+    }
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      throw ApiException('Location permission is required for SOS.');
+    }
+    final position = await Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        timeLimit: Duration(seconds: 15),
+      ),
+    );
+    return api.postJson('/v1/safety/sos', {
+      'actorType': 'passenger',
+      'actorId': session!.userId,
+      'bookingId': bookingId ?? activeBooking?['id'],
+      'location': {
+        'lat': position.latitude,
+        'lng': position.longitude,
+        'accuracy': position.accuracy,
+      },
+    });
   }
 
   Future<void> cancel() async {

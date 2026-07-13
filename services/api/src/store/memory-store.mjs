@@ -11,6 +11,8 @@ export function createBooking(payload) {
     id,
     status: 'DRAFT',
     passengerId: payload.passengerId,
+    passengerName: payload.passengerName || 'Passenger',
+    passengerMobile: payload.passengerMobile || null,
     pickup: payload.pickup,
     destination: payload.destination,
     paymentMethod: payload.paymentMethod || 'cash',

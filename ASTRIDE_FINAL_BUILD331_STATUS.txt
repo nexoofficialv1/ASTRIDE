@@ -1,0 +1,32 @@
+ASTRIDE FINAL MARKET TEST BUILD 331
+
+This build supersedes Build 330.
+
+Fixed:
+- Driver can call and SMS the assigned Passenger.
+- Passenger can call and SMS the assigned Driver.
+- Driver waiting timer now runs from DRIVER_ARRIVED.
+- After 03:00 it changes to chargeable waiting time.
+- Passenger and Driver SOS buttons send live GPS + ride ID to Admin Safety & SOS.
+- Passenger can share live ride details.
+- Duplicate active bookings are blocked/reused.
+- Passenger app restores the current active booking after restart.
+- Ride History cards are clickable and show full pickup, destination,
+  fare, payment, status and Driver ID.
+- Active history records include “Open live ride”.
+- Driver Wallet, Performance, Support, Statements, Documents and Safety
+  quick actions now open working pages.
+- Driver Wallet balance loads from the backend.
+- Driver Support submits a real support ticket.
+- Driver Documents opens verification status and replace-upload flow.
+
+Deployment:
+1. Deploy ASTRIDE_BUILD331_BACKEND_RIDE_SAFETY_CONTACT_v3.16.4.zip
+   inside site1 with Overwrite.
+2. Recycle Application Pool.
+3. Push the full Build 331 source to GitHub.
+4. Signed Release:
+   App: all
+   Environment: production
+   Version: 3.16.0
+   Build number: 331

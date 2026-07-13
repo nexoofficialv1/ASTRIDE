@@ -1,0 +1,49 @@
+ASTRIDE FINAL MARKET TEST BUILD 330 — LIVE DISPATCH & DRIVER CANCELLATION
+
+What changed
+============
+Driver App
+- Cancel assigned ride before trip start.
+- Cancellation reason is mandatory.
+- Cancellation is recorded against the Driver.
+- Passenger booking returns to SEARCHING automatically.
+- The cancelling Driver is excluded from the same booking request.
+- Cancellation is blocked after OTP verification / trip start.
+
+Passenger App
+- While SEARCHING, shows the number of free eligible nearby Drivers.
+- Displays privacy-rounded nearby vehicle markers on the map.
+- Polls dispatch status every five seconds.
+- Explains when no verified free Driver is available.
+- Updates when Admin or a Driver assigns the ride.
+
+Admin Console
+- Live Rides -> Map & Assign.
+- Shows passenger pickup, destination and eligible free Drivers on OSM.
+- Displays distance, vehicle and rating.
+- Admin can assign a selected Driver or auto-assign the nearest.
+- Refreshes live dispatch information every five seconds.
+- Shows Driver cancellation history and ride events.
+
+Eligibility
+===========
+A nearby Driver appears only when:
+- Final approved and not suspended
+- Online with a current location
+- Free from another active ride
+- Inside the configured search radius
+- Compatible with the requested ride type
+- Has not cancelled this same booking
+
+Deployment
+==========
+1. Deploy ASTRIDE_BUILD330_BACKEND_ADMIN_LIVE_DISPATCH_v3.16.3.zip
+   inside site1 with Overwrite.
+2. Recycle Application Pool.
+3. Open Admin Console in Incognito.
+4. Push the full Build 330 source to GitHub.
+5. Signed Release:
+   App: all
+   Environment: production
+   Version: 3.16.0
+   Build number: 330
