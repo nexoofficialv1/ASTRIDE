@@ -5,15 +5,31 @@ ENVIRONMENT="${1:?usage: render_mobile_env.sh staging|production [output-file]}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUTPUT="${2:-$ROOT/mobile_build/environments/$ENVIRONMENT.json}"
 
+existing_value() {
+  python3 - "$1" "$2" <<'PYREAD'
+import json,sys
+from pathlib import Path
+p=Path(sys.argv[1])
+try:
+    data=json.loads(p.read_text(encoding='utf-8'))
+    print(data.get(sys.argv[2],''))
+except Exception:
+    print('')
+PYREAD
+}
+
+EXISTING_API="$(existing_value "$OUTPUT" API_BASE_URL)"
+EXISTING_WS="$(existing_value "$OUTPUT" WS_BASE_URL)"
+
 case "$ENVIRONMENT" in
   production)
-    API_URL="${PRODUCTION_API_BASE_URL:-${API_BASE_URL:-}}"
-    WS_URL="${PRODUCTION_WS_BASE_URL:-${WS_BASE_URL:-}}"
+    API_URL="${PRODUCTION_API_BASE_URL:-${API_BASE_URL:-$EXISTING_API}}"
+    WS_URL="${PRODUCTION_WS_BASE_URL:-${WS_BASE_URL:-$EXISTING_WS}}"
     DEBUG_LOGS=false
     ;;
   staging)
-    API_URL="${STAGING_API_BASE_URL:-${API_BASE_URL:-}}"
-    WS_URL="${STAGING_WS_BASE_URL:-${WS_BASE_URL:-}}"
+    API_URL="${STAGING_API_BASE_URL:-${API_BASE_URL:-$EXISTING_API}}"
+    WS_URL="${STAGING_WS_BASE_URL:-${WS_BASE_URL:-$EXISTING_WS}}"
     DEBUG_LOGS=true
     ;;
   *) echo "Unsupported environment: $ENVIRONMENT" >&2; exit 2 ;;

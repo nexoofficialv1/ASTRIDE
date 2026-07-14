@@ -185,8 +185,19 @@ class _NewRideRequestScreenState
                   children: [
                     Expanded(
                       child: OutlinedButton(
-                        onPressed:
-                            accepting ? null : c.rejectRequest,
+                        onPressed: accepting
+                            ? null
+                            : () async {
+                                try {
+                                  await c.rejectRequest();
+                                  if (mounted) Navigator.maybePop(context);
+                                } catch (error) {
+                                  if (!mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('$error')),
+                                  );
+                                }
+                              },
                         child: const Text('Decline'),
                       ),
                     ),

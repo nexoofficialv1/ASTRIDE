@@ -1,0 +1,15 @@
+ASTRIDE Passenger + Driver APK Build Source — v3.17.0 Build 336
+Validation date: 2026-07-14
+
+Verified source gates:
+- Passenger and Driver required source/assets/locales: PASS
+- Pubspec YAML parsing and required dependency declarations: PASS
+- No final dependency_overrides/vendor cache: PASS
+- No undeclared Dart package imports detected: PASS
+- Production HTTPS/WSS runtime configuration: PASS
+- Shell/Python build scripts syntax: PASS
+- GitHub workflow YAML: PASS
+- Embedded live secret scan: PASS
+
+The included GitHub Actions workflow performs the remaining machine build gates in the user's repository:
+flutter pub get, native Android project generation, flutter analyze, flutter test, and debug or signed release APK/AAB build for both Passenger and Driver apps.

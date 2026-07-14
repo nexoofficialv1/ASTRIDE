@@ -1,9 +1,9 @@
 name: astride_driver
 description: ASTRIDE production driver mobile application
 publish_to: none
-version: 3.16.0+335
+version: 3.17.0+336
 environment:
-  sdk: ">=3.4.0 <4.0.0"
+  sdk: '>=3.4.0 <4.0.0'
 dependencies:
   url_launcher: ^6.3.1
   image_picker: ^1.1.2
@@ -24,28 +24,26 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^4.0.0
-  flutter_launcher_icons: ^0.14.1
-  flutter_native_splash: ^2.4.3
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.3
+  flutter_native_splash: ^2.4.4
 flutter:
   uses-material-design: true
   assets:
-    - assets/locales/
-    - assets/brand/
-
+  - assets/locales/
+  - assets/brand/
 flutter_launcher_icons:
   android: true
   ios: true
   image_path: assets/brand/app_icon.png
-  adaptive_icon_background: "#0D1B3D"
+  adaptive_icon_background: '#0D1B3D'
   adaptive_icon_foreground: assets/brand/app_icon.png
   remove_alpha_ios: true
-
 flutter_native_splash:
-  color: "#0D1B3D"
+  color: '#0D1B3D'
   image: assets/brand/splash_logo.png
   android_12:
-    color: "#0D1B3D"
+    color: '#0D1B3D'
     image: assets/brand/app_icon.png
   ios: true
   android: true

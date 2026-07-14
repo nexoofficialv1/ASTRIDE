@@ -4,12 +4,14 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../core/app_config.dart';
 import '../core/app_locale.dart';
 import '../models/runtime_config.dart';
 import '../models/session.dart';
 import '../services/api_client.dart';
 import '../services/session_store.dart';
 import '../services/push_notification_service.dart';
+import '../services/live_service.dart';
 
 class DriverController extends ChangeNotifier {
   DriverController(this.api, this.store);
@@ -42,6 +44,9 @@ class DriverController extends ChangeNotifier {
   bool _presenceInFlight = false;
   bool _pushInitialized = false;
   final Set<String> _rejectedRequestIds = <String>{};
+  final LiveService _live = LiveService();
+  StreamSubscription<Map<String, dynamic>>? _liveSubscription;
+  String? _liveBookingId;
 
   bool get mustChangePassword => session?.mustChangePassword == true;
   String t(String key) => locale?.t(key) ?? key;
@@ -60,7 +65,7 @@ class DriverController extends ChangeNotifier {
 
     try {
       final response = await api.getJson(
-        '/v1/mobile/config?app=DRIVER&version=3.15.1',
+        '/v1/public/mobile-config?app=driver&version=${AppConfig.appVersion}',
       );
       config = RuntimeConfig.fromJson(
         (response['config'] ?? response).cast<String, dynamic>(),
@@ -269,11 +274,8 @@ class DriverController extends ChangeNotifier {
     online = profile['online'] == true;
     if (online && approval == 'APPROVED') {
       _startPresenceHeartbeat();
-      if (activeRide == null) {
-        _startRequestPolling();
-      } else {
-        _stopRequestPolling();
-      }
+      _startRequestPolling();
+      if (activeRide != null) _connectActiveRide();
     } else {
       _stopRequestPolling();
       _stopPresenceHeartbeat();
@@ -414,7 +416,6 @@ class DriverController extends ChangeNotifier {
   void _stopRequestPolling() {
     _requestPoller?.cancel();
     _requestPoller = null;
-    request = null;
   }
 
   void _startPresenceHeartbeat() {
@@ -486,14 +487,14 @@ class DriverController extends ChangeNotifier {
       if (assigned is Map) {
         activeRide = assigned.cast<String, dynamic>();
         request = null;
-        _requestPoller?.cancel();
-        _requestPoller = null;
+        _connectActiveRide();
         notifyListeners();
         return;
       }
 
       if (activeRide != null) {
         activeRide = null;
+        _disconnectActiveRide();
       }
 
       final incoming = response['request'];
@@ -512,6 +513,41 @@ class DriverController extends ChangeNotifier {
     } finally {
       _pollInFlight = false;
     }
+  }
+
+  void _connectActiveRide() {
+    final bookingId = '${activeRide?['id'] ?? ''}';
+    final token = session?.token ?? '';
+    if (bookingId.isEmpty || token.isEmpty) return;
+    if (_liveBookingId == bookingId && _liveSubscription != null) return;
+    _disconnectActiveRide();
+    _liveBookingId = bookingId;
+    _live.connect(bookingId, token);
+    _liveSubscription = _live.events.listen((event) {
+      final raw = event['booking'];
+      if (raw is! Map) return;
+      final booking = raw.cast<String, dynamic>();
+      if ('${booking['id'] ?? ''}' != _liveBookingId) return;
+      final nextStatus = '${booking['status'] ?? ''}';
+      if (const {
+        'COMPLETED',
+        'CANCELLED_BY_PASSENGER',
+        'CANCELLED_BY_DRIVER',
+      }.contains(nextStatus)) {
+        activeRide = null;
+        _disconnectActiveRide();
+      } else {
+        activeRide = booking;
+      }
+      notifyListeners();
+    });
+  }
+
+  void _disconnectActiveRide() {
+    _liveBookingId = null;
+    unawaited(_liveSubscription?.cancel());
+    _liveSubscription = null;
+    _live.disconnect();
   }
 
   Future<void> resumeRealtime() async {
@@ -539,7 +575,7 @@ class DriverController extends ChangeNotifier {
           ? session!.staffId
           : session!.userId}',
       locale: locale?.code ?? 'en',
-      appVersion: '3.16.0+335',
+      appVersion: AppConfig.appVersion,
     );
 
     if (token == null) {
@@ -635,14 +671,18 @@ class DriverController extends ChangeNotifier {
     activeRide = ((response['booking'] ?? response) as Map)
         .cast<String, dynamic>();
     request = null;
-    _requestPoller?.cancel();
-    _requestPoller = null;
+    _connectActiveRide();
     notifyListeners();
   }
 
-  void rejectRequest() {
+  Future<void> rejectRequest({String reason = 'DRIVER_DECLINED'}) async {
     final id = '${request?['id'] ?? ''}';
-    if (id.isNotEmpty) _rejectedRequestIds.add(id);
+    if (id.isEmpty) return;
+    await api.postJson(
+      '/v1/bookings/$id/reject',
+      {'reason': reason},
+    );
+    _rejectedRequestIds.add(id);
     request = null;
     notifyListeners();
   }
@@ -661,13 +701,14 @@ class DriverController extends ChangeNotifier {
         throw ApiException('Enter the passenger ride OTP.');
       }
 
-      await api.postJson(
-        '/v1/bookings/$bookingId/transition',
-        {
-          'status': 'OTP_VERIFIED',
-          'otp': otp.trim(),
-        },
+      final verification = await api.postJson(
+        '/v1/bookings/$bookingId/verify-ride-otp',
+        {'code': otp.trim()},
       );
+      final verifiedBooking = verification['booking'];
+      if (verifiedBooking is Map) {
+        activeRide = verifiedBooking.cast<String, dynamic>();
+      }
       response = await api.postJson(
         '/v1/bookings/$bookingId/transition',
         {'status': 'IN_PROGRESS'},
@@ -682,6 +723,7 @@ class DriverController extends ChangeNotifier {
     activeRide = Map<String, dynamic>.from(response);
     if (status == 'COMPLETED') {
       activeRide = null;
+      _disconnectActiveRide();
       if (online) _startRequestPolling();
     }
     notifyListeners();
@@ -706,6 +748,7 @@ class DriverController extends ChangeNotifier {
       );
       activeRide = null;
       request = null;
+      _disconnectActiveRide();
       if (online) _startRequestPolling();
     } catch (e) {
       error = e.toString();
@@ -779,6 +822,7 @@ class DriverController extends ChangeNotifier {
 
     _stopRequestPolling();
     _stopPresenceHeartbeat();
+    _disconnectActiveRide();
     await _pushMessageSubscription?.cancel();
     await _pushOpenedSubscription?.cancel();
     _pushMessageSubscription = null;
@@ -798,6 +842,8 @@ class DriverController extends ChangeNotifier {
   void dispose() {
     _requestPoller?.cancel();
     _presenceTimer?.cancel();
+    _disconnectActiveRide();
+    _live.dispose();
     _pushMessageSubscription?.cancel();
     _pushOpenedSubscription?.cancel();
     super.dispose();

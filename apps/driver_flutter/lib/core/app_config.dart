@@ -10,14 +10,21 @@ class AppConfig {
   );
   static const enableDebugLogs = bool.fromEnvironment(
     'ENABLE_DEBUG_LOGS',
-    defaultValue: true,
+    defaultValue: false,
   );
   static const requestTimeout = Duration(seconds: 20);
 
   static const allowInsecureHttp = bool.fromEnvironment(
     'ALLOW_INSECURE_HTTP',
-    defaultValue: true,
+    defaultValue: false,
   );
+
+  static const razorpayKeyId = String.fromEnvironment(
+    'RAZORPAY_KEY_ID',
+    defaultValue: '',
+  );
+
+  static const appVersion = '3.17.0+336';
 
   static bool get isProduction => environment == 'production';
   static bool get isStaging => environment == 'staging';

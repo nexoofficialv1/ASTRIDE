@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../design/astride_theme.dart';
 import '../services/api_client.dart';
+import '../services/payment_gateway.dart';
 import '../state/passenger_controller.dart';
 import '../widgets/common/astride_map_canvas.dart';
 import 'ride_status_screen.dart';
@@ -36,6 +37,7 @@ class _BookingScreenState extends State<BookingScreen> {
   String rideType = 'FULL_TOTO';
   String paymentPreference = 'BOTH';
   bool safeRide = false;
+  final PaymentGateway paymentGateway = PaymentGateway();
   bool busy = false;
   Map<String, dynamic>? quote;
   double? routeDistanceKm;
@@ -53,6 +55,7 @@ class _BookingScreenState extends State<BookingScreen> {
     pickupText.dispose();
     destinationText.dispose();
     destinationFocus.dispose();
+    paymentGateway.dispose();
     super.dispose();
   }
 
@@ -352,7 +355,12 @@ class _BookingScreenState extends State<BookingScreen> {
         destinationAddress: destinationText.text.trim(),
         rideType: rideType,
         distanceKm: routeDistanceKm,
+        saferideEnabled: safeRide,
       );
+      if (paymentPreference == 'UPI' &&
+          widget.controller.activeBooking?['status'] == 'PAYMENT_PENDING') {
+        await widget.controller.payPendingUpi(paymentGateway);
+      }
       if (!mounted) return;
       Navigator.pushReplacement(
         context,

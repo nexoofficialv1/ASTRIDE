@@ -4,11 +4,13 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../core/app_config.dart';
 import '../core/app_locale.dart';
 import '../models/runtime_config.dart';
 import '../models/session.dart';
 import '../services/api_client.dart';
 import '../services/session_store.dart';
+import '../services/payment_gateway.dart';
 import '../services/push_notification_service.dart';
 
 class PassengerController extends ChangeNotifier {
@@ -48,7 +50,7 @@ class PassengerController extends ChangeNotifier {
       api.token = session?.token;
 
       final response = await api.getJson(
-        '/v1/mobile/config?app=PASSENGER&version=3.15.1',
+        '/v1/public/mobile-config?app=passenger&version=${AppConfig.appVersion}',
       );
       config = RuntimeConfig.fromJson(
         (response['config'] ?? response).cast<String, dynamic>(),
@@ -258,6 +260,7 @@ class PassengerController extends ChangeNotifier {
     String? destinationAddress,
     String rideType = 'FULL_TOTO',
     double? distanceKm,
+    bool saferideEnabled = false,
   }) async {
     activeBooking = await api.postJson('/v1/bookings', {
       'passengerId': session!.userId,
@@ -268,8 +271,92 @@ class PassengerController extends ChangeNotifier {
       'paymentMethod': method,
       'paymentPreference': method,
       'rideType': rideType,
+      'saferideEnabled': saferideEnabled,
       if (distanceKm != null) 'distanceKm': distanceKm,
     });
+    notifyListeners();
+  }
+
+
+  Future<void> payPendingUpi(PaymentGateway gateway) async {
+    final booking = activeBooking;
+    final passengerSession = session;
+    if (booking == null || passengerSession == null) {
+      throw ApiException('No pending booking is available for payment.');
+    }
+    final bookingId = '${booking['id'] ?? ''}';
+    if (bookingId.isEmpty) {
+      throw ApiException('Booking ID is missing.');
+    }
+    final preference =
+        '${booking['paymentPreference'] ?? booking['paymentMethod'] ?? ''}'
+            .toUpperCase();
+    if (preference != 'UPI') {
+      throw ApiException('This booking does not require UPI pre-payment.');
+    }
+
+    final fare = booking['fareEstimate'] is Map
+        ? (booking['fareEstimate'] as Map).cast<String, dynamic>()
+        : const <String, dynamic>{};
+    final amountPaise = (num.tryParse('${fare['totalPaise']}') ??
+            ((num.tryParse('${fare['amount'] ?? fare['total'] ?? 0}') ?? 0) *
+                100))
+        .round();
+    if (amountPaise <= 0) {
+      throw ApiException('The payable fare is unavailable.');
+    }
+
+    final payment = await api.postJson('/v1/payments/orders', {
+      'bookingId': bookingId,
+      'passengerId': passengerSession.userId,
+      'method': 'UPI',
+      'amountPaise': amountPaise,
+      'idempotencyKey': 'mobile:$bookingId:$amountPaise',
+    });
+    final paymentId = '${payment['id'] ?? ''}';
+    final providerOrderId = '${payment['providerOrderId'] ?? ''}';
+    if (paymentId.isEmpty || providerOrderId.isEmpty) {
+      throw ApiException('Payment order was not returned by the server.');
+    }
+
+    String keyId = AppConfig.razorpayKeyId;
+    try {
+      final publicConfig = await api.getJson(
+        '/v1/public/mobile-config?app=passenger',
+      );
+      final clientProviders = publicConfig['clientProviders'];
+      final payments = clientProviders is Map
+          ? clientProviders['payments']
+          : null;
+      if (payments is Map) {
+        keyId = '${payments['razorpayKeyId'] ?? keyId}';
+      }
+    } catch (_) {
+      // The compile-time public key remains the secure fallback.
+    }
+
+    final result = await gateway.open(
+      keyId: keyId,
+      orderId: providerOrderId,
+      amountPaise: amountPaise,
+      passengerName: '${profile['fullName'] ?? (profileName.isNotEmpty ? profileName : 'Passenger')}',
+      passengerMobile: passengerSession.mobile,
+      description: 'ASTRIDE ride $bookingId',
+    );
+    final verification = await api.postJson(
+      '/v1/payments/$paymentId/verify',
+      {
+        'providerPaymentId': result.paymentId,
+        'providerOrderId': result.orderId,
+        'signature': result.signature,
+      },
+    );
+    final synchronized = verification['booking'];
+    if (synchronized is Map) {
+      activeBooking = synchronized.cast<String, dynamic>();
+    } else {
+      await restoreActiveBooking();
+    }
     notifyListeners();
   }
 
@@ -297,7 +384,7 @@ class PassengerController extends ChangeNotifier {
       actorId: session!.userId,
       deviceId: 'passenger-${session!.userId}',
       locale: locale?.code ?? 'en',
-      appVersion: '3.16.0+335',
+      appVersion: AppConfig.appVersion,
     );
 
     if (token == null) {
@@ -366,7 +453,7 @@ class PassengerController extends ChangeNotifier {
 
     await api.postJson(
       '/v1/bookings/${activeBooking!['id']}/cancel',
-      {'actor': 'PASSENGER'},
+      {'reason': 'PASSENGER_REQUEST'},
     );
     activeBooking = null;
     notifyListeners();

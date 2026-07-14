@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../design/astride_theme.dart';
 import '../services/live_service.dart';
+import '../services/payment_gateway.dart';
 import '../state/passenger_controller.dart';
 import '../widgets/common/astride_map_canvas.dart';
 import 'ride/ride_completed_screen.dart';
@@ -26,6 +27,7 @@ class RideStatusScreen extends StatefulWidget {
 
 class _RideStatusScreenState extends State<RideStatusScreen> {
   final live = LiveService();
+  final paymentGateway = PaymentGateway();
   StreamSubscription<Map<String, dynamic>>? subscription;
   Timer? dispatchPoller;
 
@@ -42,17 +44,22 @@ class _RideStatusScreenState extends State<RideStatusScreen> {
         '${widget.controller.activeBooking?['status'] ?? 'SEARCHING'}';
     final id = widget.controller.activeBooking?['id']?.toString();
     if (id != null && id.isNotEmpty) {
-      live.connect(id);
+      final token = widget.controller.session?.token;
+      if (token != null && token.isNotEmpty) {
+        live.connect(id, token);
+      }
       subscription = live.events.listen((event) {
         if (!mounted) return;
-        final explicitStatus = event['status'];
-        if (explicitStatus != null) {
-          final next = '$explicitStatus';
+        final rawBooking = event['booking'];
+        if (rawBooking is Map) {
+          final booking = rawBooking.cast<String, dynamic>();
+          widget.controller.resumeBooking(booking);
+          final next = '${booking['status'] ?? status}';
           setState(() => status = next);
           if (next == 'COMPLETED') _openCompleted();
-        } else {
-          unawaited(_refreshDispatch());
+          return;
         }
+        unawaited(_refreshDispatch());
       });
     }
     _refreshDispatch();
@@ -67,8 +74,11 @@ class _RideStatusScreenState extends State<RideStatusScreen> {
     subscription?.cancel();
     dispatchPoller?.cancel();
     live.dispose();
+    paymentGateway.dispose();
     super.dispose();
   }
+
+  bool get paymentPending => status == 'PAYMENT_PENDING';
 
   bool get searching => status == 'SEARCHING';
 
@@ -317,6 +327,17 @@ class _RideStatusScreenState extends State<RideStatusScreen> {
             ],
           ),
           const SizedBox(height: 16),
+          if (paymentPending) ...[
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _payPendingUpi,
+                icon: const Icon(Icons.account_balance_wallet_outlined),
+                label: const Text('Pay by UPI to search for a Driver'),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           Row(
             children: [
               Expanded(
@@ -560,6 +581,16 @@ class _RideStatusScreenState extends State<RideStatusScreen> {
     }
   }
 
+  Future<void> _payPendingUpi() async {
+    try {
+      await widget.controller.payPendingUpi(paymentGateway);
+      if (!mounted) return;
+      await _refreshDispatch();
+    } catch (error) {
+      _toast('$error');
+    }
+  }
+
   Future<void> _cancel() async {
     try {
       await widget.controller.cancel();
@@ -569,13 +600,27 @@ class _RideStatusScreenState extends State<RideStatusScreen> {
     }
   }
 
+  num get _completedFare {
+    final booking = widget.controller.activeBooking ?? const <String, dynamic>{};
+    final fare = booking['fareEstimate'] is Map
+        ? booking['fareEstimate'] as Map
+        : const <String, dynamic>{};
+    final paise = num.tryParse('${booking['finalFarePaise'] ?? fare['totalPaise'] ?? ''}');
+    if (paise != null && paise > 0) return paise / 100;
+    return num.tryParse(
+          '${booking['finalFare'] ?? fare['amount'] ?? fare['total'] ?? booking['fare'] ?? 0}',
+        ) ??
+        0;
+  }
+
   void _openCompleted() {
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
         builder: (_) => RideCompletedScreen(
           t: widget.controller.t,
-          fare: 50,
+          fare: _completedFare,
+          paymentMethod: '${widget.controller.activeBooking?['paymentPreference'] ?? widget.controller.activeBooking?['paymentMethod'] ?? 'CASH'}',
           onDone: () => Navigator.pop(context),
         ),
       ),
