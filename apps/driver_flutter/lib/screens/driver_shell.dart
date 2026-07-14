@@ -32,8 +32,11 @@ class _DriverShellState extends State<DriverShell> {
     if (rideId != null && rideId != lastRideId) {
       lastRideId = rideId;
       setState(() => index = 1);
-    } else if (rideId == null) {
-      lastRideId = null;
+    } else if (rideId == null && lastRideId != null) {
+      setState(() {
+        lastRideId = null;
+        index = 1;
+      });
     }
   }
 
@@ -68,7 +71,12 @@ class _DriverShellState extends State<DriverShell> {
           ),
         ),
       ),
-      c.activeRide == null ? RideHistoryDriverScreen(controller:c) : ActiveRideScreen(controller:c),
+      c.activeRide == null
+          ? RideHistoryDriverScreen(controller: c)
+          : ActiveRideScreen(
+              controller: c,
+              onBack: () => setState(() => index = 0),
+            ),
       DriverEarningsScreen(controller:c),
       DriverPerformanceScreen(controller:c),
       DriverProfileScreen(controller:c),

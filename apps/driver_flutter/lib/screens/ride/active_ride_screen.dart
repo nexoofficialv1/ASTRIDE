@@ -12,9 +12,11 @@ class ActiveRideScreen extends StatefulWidget {
   const ActiveRideScreen({
     super.key,
     required this.controller,
+    required this.onBack,
   });
 
   final DriverController controller;
+  final VoidCallback onBack;
 
   @override
   State<ActiveRideScreen> createState() =>
@@ -64,7 +66,7 @@ class _ActiveRideScreenState extends State<ActiveRideScreen> {
               child: Row(
                 children: [
                   IconButton.filledTonal(
-                    onPressed: () => Navigator.maybePop(context),
+                    onPressed: widget.onBack,
                     icon: const Icon(Icons.arrow_back),
                   ),
                   const Spacer(),
@@ -528,7 +530,8 @@ class _ActiveRideScreenState extends State<ActiveRideScreen> {
 
     try {
       await widget.controller.cancelActiveRide(reason);
-      if (mounted) Navigator.pop(context);
+      // DriverShell rebuilds this tab as Ride History.
+      // Do not pop the root application route.
     } catch (error) {
       _toast('$error');
     }

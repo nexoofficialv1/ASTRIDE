@@ -1,0 +1,25 @@
+ASTRIDE BUILD 332 — DRIVER CANCEL BLACK-SCREEN HOTFIX
+
+Cause
+=====
+ActiveRideScreen is embedded inside DriverShell's IndexedStack.
+After Driver cancellation the old code called Navigator.pop(context),
+which could pop the entire Driver application route and show a black screen.
+
+Fixed
+=====
+- Driver cancellation no longer pops the root application route.
+- DriverShell automatically rebuilds the Rides tab as Ride History after
+  the active ride is cleared.
+- Active Ride back arrow now switches to Home instead of popping the app.
+- Passenger re-search and backend cancellation logic remain unchanged.
+
+Deployment
+==========
+No backend redeployment is required.
+
+GitHub Signed Release:
+App: all
+Environment: production
+Version: 3.16.0
+Build number: 332
