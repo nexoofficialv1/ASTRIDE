@@ -296,8 +296,8 @@ class PassengerController extends ChangeNotifier {
       actorType: 'passenger',
       actorId: session!.userId,
       deviceId: 'passenger-${session!.userId}',
-      locale: locale?.languageCode ?? 'en',
-      appVersion: '3.16.0+334',
+      locale: locale?.code ?? 'en',
+      appVersion: '3.16.0+335',
     );
 
     if (token == null) {

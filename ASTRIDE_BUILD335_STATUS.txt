@@ -1,0 +1,23 @@
+ASTRIDE BUILD 335 — APPLOCALE COMPILE HOTFIX
+
+GitHub analyzer error:
+The getter 'languageCode' isn't defined for the type 'AppLocale'.
+
+Cause:
+AppLocale exposes the selected language through the field `code`,
+not `languageCode`.
+
+Fixed:
+- Passenger controller: locale?.languageCode -> locale?.code
+- Driver controller: locale?.languageCode -> locale?.code
+- Passenger app version: 3.16.0+335
+- Driver app version: 3.16.0+335
+
+No backend deployment is required.
+Partner App does not need a new build.
+
+Signed Release:
+App: passenger, driver
+Environment: production
+Version: 3.16.0
+Build number: 335
