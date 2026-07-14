@@ -1,0 +1,53 @@
+ASTRIDE BUILD 334 — END-TO-END DRIVER DISPATCH SYNCHRONIZATION
+
+Root causes
+===========
+1. The Driver App polled only every eight seconds and did not immediately
+   resynchronize when returning to the foreground.
+2. Driver online state could remain visible in the profile while the backend
+   runtime-location presence had expired after a recycle.
+3. The Passenger screen depended on a specific booking response and could
+   remain on SEARCHING after the Driver accepted.
+4. Firebase device registration existed in source but was never initialized.
+5. Old SEARCHING test bookings could be offered before the newest request.
+
+Fixed flow
+==========
+Passenger creates booking
+-> backend stamps searchStartedAt
+-> eligible nearby Drivers are available through /v1/driver/sync
+-> foreground Driver receives it within about two seconds
+-> Driver location/online presence refreshes every fifteen seconds
+-> foreground/resumed App synchronizes immediately
+-> Driver accepts atomically
+-> Passenger checks authoritative active booking every two seconds
+-> Passenger shows assigned Driver details
+-> Firebase push can wake/notify background or closed apps when the
+   Firebase notification provider is correctly configured in live mode.
+
+Important production setting
+============================
+For closed/background Driver notification:
+Admin Console -> Provider Selection
+Notification provider: firebase
+Notification provider mode: live
+
+The Firebase credential vault must include:
+- server service-account fields for FCM sending
+- clients.driver FirebaseOptions
+- clients.passenger FirebaseOptions
+
+Without Firebase configuration, foreground polling and resume synchronization
+still work, but a fully killed App cannot be awakened by the operating system.
+
+Deployment
+==========
+1. Deploy ASTRIDE_BUILD334_BACKEND_REALTIME_DISPATCH_v3.16.6.zip
+   inside site1 with Overwrite.
+2. Recycle Application Pool.
+3. Push full Build 334 to GitHub.
+4. Signed Release:
+   App: passenger, driver
+   Environment: production
+   Version: 3.16.0
+   Build number: 334

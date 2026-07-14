@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../core/app_locale.dart';
@@ -8,6 +9,7 @@ import '../models/runtime_config.dart';
 import '../models/session.dart';
 import '../services/api_client.dart';
 import '../services/session_store.dart';
+import '../services/push_notification_service.dart';
 
 class DriverController extends ChangeNotifier {
   DriverController(this.api, this.store);
@@ -33,6 +35,12 @@ class DriverController extends ChangeNotifier {
   double todayEarnings = 0;
 
   Timer? _requestPoller;
+  Timer? _presenceTimer;
+  StreamSubscription<RemoteMessage>? _pushMessageSubscription;
+  StreamSubscription<RemoteMessage>? _pushOpenedSubscription;
+  bool _pollInFlight = false;
+  bool _presenceInFlight = false;
+  bool _pushInitialized = false;
   final Set<String> _rejectedRequestIds = <String>{};
 
   bool get mustChangePassword => session?.mustChangePassword == true;
@@ -66,6 +74,7 @@ class DriverController extends ChangeNotifier {
         await _migrateLinkedIdentity();
         if (!mustChangePassword) {
           await refreshDriver();
+          await _initializePush();
         }
       } catch (e) {
         error = e.toString();
@@ -153,6 +162,7 @@ class DriverController extends ChangeNotifier {
 
       if (!mustChangePassword) {
         await refreshDriver();
+        await _initializePush();
       }
     } catch (e) {
       error = e.toString();
@@ -180,6 +190,7 @@ class DriverController extends ChangeNotifier {
       session = session!.copyWith(mustChangePassword: false);
       await store.save(session!);
       await refreshDriver();
+      await _initializePush();
     } catch (e) {
       error = e.toString();
       rethrow;
@@ -256,10 +267,16 @@ class DriverController extends ChangeNotifier {
         '${profile['status'] ?? profile['approvalStatus'] ?? 'PENDING'}';
     onboardingStep = '${profile['onboardingStep'] ?? 'PROFILE'}';
     online = profile['online'] == true;
-    if (online && approval == 'APPROVED' && activeRide == null) {
-      _startRequestPolling();
+    if (online && approval == 'APPROVED') {
+      _startPresenceHeartbeat();
+      if (activeRide == null) {
+        _startRequestPolling();
+      } else {
+        _stopRequestPolling();
+      }
     } else {
       _stopRequestPolling();
+      _stopPresenceHeartbeat();
     }
 
     notifyListeners();
@@ -386,11 +403,12 @@ class DriverController extends ChangeNotifier {
 
   void _startRequestPolling() {
     _requestPoller?.cancel();
-    pollRequests();
+    unawaited(pollRequests());
     _requestPoller = Timer.periodic(
-      const Duration(seconds: 8),
-      (_) => pollRequests(),
+      const Duration(seconds: 2),
+      (_) => unawaited(pollRequests()),
     );
+    _startPresenceHeartbeat();
   }
 
   void _stopRequestPolling() {
@@ -399,18 +417,72 @@ class DriverController extends ChangeNotifier {
     request = null;
   }
 
+  void _startPresenceHeartbeat() {
+    if (!online || session == null) return;
+    _presenceTimer?.cancel();
+    unawaited(_syncPresence());
+    _presenceTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => unawaited(_syncPresence()),
+    );
+  }
+
+  void _stopPresenceHeartbeat() {
+    _presenceTimer?.cancel();
+    _presenceTimer = null;
+  }
+
+  Future<void> _syncPresence() async {
+    if (!online ||
+        session == null ||
+        _presenceInFlight) {
+      return;
+    }
+    _presenceInFlight = true;
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) return;
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return;
+      }
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 12),
+        ),
+      );
+      final response = await api.putJson(
+        '/v1/driver-profiles/${session!.userId}/online',
+        {
+          'online': true,
+          'location': {
+            'lat': position.latitude,
+            'lng': position.longitude,
+            'accuracy': position.accuracy,
+          },
+        },
+      );
+      profile = {...profile, ...response};
+      online = response['online'] == true;
+    } catch (_) {
+      // The next heartbeat will retry.
+    } finally {
+      _presenceInFlight = false;
+    }
+  }
+
   Future<void> pollRequests() async {
     if (!online ||
         approval != 'APPROVED' ||
-        activeRide != null ||
-        session == null) {
+        session == null ||
+        _pollInFlight) {
       return;
     }
-
+    _pollInFlight = true;
     try {
-      final activeResponse =
-          await api.getJson('/v1/driver/active-ride');
-      final assigned = activeResponse['booking'];
+      final response = await api.getJson('/v1/driver/sync');
+      final assigned = response['activeRide'];
       if (assigned is Map) {
         activeRide = assigned.cast<String, dynamic>();
         request = null;
@@ -420,20 +492,74 @@ class DriverController extends ChangeNotifier {
         return;
       }
 
-      final response = await api.getJson('/v1/driver/requests');
-      final items = ((response['items'] ?? const []) as List)
-          .whereType<Map>()
-          .map((item) => item.cast<String, dynamic>())
-          .where(
-            (item) =>
-                !_rejectedRequestIds.contains('${item['id']}'),
-          )
-          .toList();
+      if (activeRide != null) {
+        activeRide = null;
+      }
 
-      request = items.isEmpty ? null : items.first;
+      final incoming = response['request'];
+      final nextRequest = incoming is Map
+          ? incoming.cast<String, dynamic>()
+          : null;
+      if (nextRequest != null &&
+          _rejectedRequestIds.contains('${nextRequest['id']}')) {
+        request = null;
+      } else {
+        request = nextRequest;
+      }
       notifyListeners();
     } catch (_) {
-      // Polling failure must not log the driver out.
+      // Polling failure never logs the Driver out.
+    } finally {
+      _pollInFlight = false;
+    }
+  }
+
+  Future<void> resumeRealtime() async {
+    if (session == null || mustChangePassword) return;
+    try {
+      await refreshDriver();
+      if (online) {
+        await _syncPresence();
+        await pollRequests();
+      }
+    } catch (_) {
+      // A later heartbeat/poll will retry.
+    }
+  }
+
+  Future<void> _initializePush() async {
+    if (_pushInitialized || session == null) return;
+    _pushInitialized = true;
+
+    final service = PushNotificationService(api);
+    final token = await service.initialize(
+      actorType: 'driver',
+      actorId: session!.userId,
+      deviceId: 'driver-${session!.staffId.isNotEmpty
+          ? session!.staffId
+          : session!.userId}',
+      locale: locale?.languageCode ?? 'en',
+      appVersion: '3.16.0+334',
+    );
+
+    if (token == null) {
+      _pushInitialized = false;
+      return;
+    }
+
+    _pushMessageSubscription ??=
+        FirebaseMessaging.onMessage.listen((message) {
+      unawaited(pollRequests());
+    });
+    _pushOpenedSubscription ??=
+        FirebaseMessaging.onMessageOpenedApp.listen((message) {
+      unawaited(resumeRealtime());
+    });
+
+    final initial =
+        await FirebaseMessaging.instance.getInitialMessage();
+    if (initial != null) {
+      await resumeRealtime();
     }
   }
 
@@ -490,6 +616,7 @@ class DriverController extends ChangeNotifier {
       _startRequestPolling();
     } else {
       _stopRequestPolling();
+      _stopPresenceHeartbeat();
     }
     notifyListeners();
   }
@@ -651,6 +778,12 @@ class DriverController extends ChangeNotifier {
     } catch (_) {}
 
     _stopRequestPolling();
+    _stopPresenceHeartbeat();
+    await _pushMessageSubscription?.cancel();
+    await _pushOpenedSubscription?.cancel();
+    _pushMessageSubscription = null;
+    _pushOpenedSubscription = null;
+    _pushInitialized = false;
     await store.clear();
     api.token = null;
     session = null;
@@ -664,6 +797,9 @@ class DriverController extends ChangeNotifier {
   @override
   void dispose() {
     _requestPoller?.cancel();
+    _presenceTimer?.cancel();
+    _pushMessageSubscription?.cancel();
+    _pushOpenedSubscription?.cancel();
     super.dispose();
   }
 

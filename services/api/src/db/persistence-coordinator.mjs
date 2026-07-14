@@ -8,6 +8,9 @@ import { exportSafetyStoreState,restoreSafetyStoreState } from '../store/safety-
 import { exportTrackingStoreState,restoreTrackingStoreState } from '../store/tracking-store.mjs';
 import { exportSharePoolingState,restoreSharePoolingState } from '../store/share-pooling-store.mjs';
 import { exportCampaignStoreState,restoreCampaignStoreState } from '../store/campaign-store.mjs';
+import { exportPromoterStoreState,restorePromoterStoreState } from '../store/promoter-store.mjs';
+import { exportStaffAuthState,restoreStaffAuthState } from '../store/staff-auth-store.mjs';
+import { exportDeviceStoreState,restoreDeviceStoreState } from '../store/device-store.mjs';
 
 const modules={
   operations:{exportState:exportMemoryStoreState,restoreState:restoreMemoryStoreState},
@@ -18,6 +21,9 @@ const modules={
   tracking:{exportState:exportTrackingStoreState,restoreState:restoreTrackingStoreState},
   sharePooling:{exportState:exportSharePoolingState,restoreState:restoreSharePoolingState},
   campaigns:{exportState:exportCampaignStoreState,restoreState:restoreCampaignStoreState},
+  promoters:{exportState:exportPromoterStoreState,restoreState:restorePromoterStoreState},
+  staffAuth:{exportState:exportStaffAuthState,restoreState:restoreStaffAuthState},
+  devices:{exportState:exportDeviceStoreState,restoreState:restoreDeviceStoreState},
 };
 let initialized=false,dirty=false,flushTimer=null,lastFlushAt=null,lastError=null,writeInFlight=null;
 

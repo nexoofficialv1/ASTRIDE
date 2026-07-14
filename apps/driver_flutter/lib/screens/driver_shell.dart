@@ -14,13 +14,14 @@ class DriverShell extends StatefulWidget {
   final DriverController controller;
   @override State<DriverShell> createState() => _DriverShellState();
 }
-class _DriverShellState extends State<DriverShell> {
+class _DriverShellState extends State<DriverShell> with WidgetsBindingObserver {
   int index = 0;
   String? lastRideId;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     lastRideId = widget.controller.activeRide?['id']?.toString();
     widget.controller.addListener(_syncAssignedRide);
   }
@@ -41,7 +42,15 @@ class _DriverShellState extends State<DriverShell> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      widget.controller.resumeRealtime();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     widget.controller.removeListener(_syncAssignedRide);
     super.dispose();
   }

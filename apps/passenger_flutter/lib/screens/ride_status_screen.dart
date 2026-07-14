@@ -45,16 +45,20 @@ class _RideStatusScreenState extends State<RideStatusScreen> {
       live.connect(id);
       subscription = live.events.listen((event) {
         if (!mounted) return;
-        final next =
-            '${event['status'] ?? event['eventType'] ?? status}';
-        setState(() => status = next);
-        if (next == 'COMPLETED') _openCompleted();
+        final explicitStatus = event['status'];
+        if (explicitStatus != null) {
+          final next = '$explicitStatus';
+          setState(() => status = next);
+          if (next == 'COMPLETED') _openCompleted();
+        } else {
+          unawaited(_refreshDispatch());
+        }
       });
     }
     _refreshDispatch();
     dispatchPoller = Timer.periodic(
-      const Duration(seconds: 5),
-      (_) => _refreshDispatch(),
+      const Duration(seconds: 2),
+      (_) => unawaited(_refreshDispatch()),
     );
   }
 
@@ -483,22 +487,36 @@ class _RideStatusScreenState extends State<RideStatusScreen> {
   }
 
   Future<void> _refreshDispatch() async {
-    final bookingId =
-        widget.controller.activeBooking?['id']?.toString();
-    if (bookingId == null || bookingId.isEmpty) return;
-
     try {
+      final activeResponse = await widget.controller.api.getJson(
+        '/v1/passenger/active-booking',
+      );
+      final active = activeResponse['booking'];
+      if (!mounted) return;
+
+      if (active is! Map) {
+        return;
+      }
+
+      final booking = active.cast<String, dynamic>();
+      final bookingId = '${booking['id'] ?? ''}';
+      if (bookingId.isEmpty) return;
+
+      widget.controller.resumeBooking(booking);
+
       final response = await widget.controller.api.getJson(
         '/v1/bookings/$bookingId/dispatch-status',
       );
-      final booking = response['booking'];
+      final synchronized = response['booking'];
       final markers = response['nearbyDrivers'];
 
-      if (!mounted || booking is! Map) return;
+      if (!mounted || synchronized is! Map) return;
+      final current =
+          synchronized.cast<String, dynamic>();
+
       setState(() {
-        status = '${booking['status'] ?? status}';
-        widget.controller.activeBooking =
-            booking.cast<String, dynamic>();
+        status = '${current['status'] ?? status}';
+        widget.controller.resumeBooking(current);
         nearbyCount =
             int.tryParse('${response['nearbyCount'] ?? 0}') ?? 0;
         searchRadiusKm =
@@ -521,6 +539,7 @@ class _RideStatusScreenState extends State<RideStatusScreen> {
             ? (response['assignedDriver'] as Map)
                 .cast<String, dynamic>()
             : null;
+
         final assignedLocation = assignedDriver?['location'];
         if (!searching && assignedLocation is Map) {
           final lat =
@@ -532,8 +551,12 @@ class _RideStatusScreenState extends State<RideStatusScreen> {
           }
         }
       });
+
+      if (status == 'COMPLETED') {
+        _openCompleted();
+      }
     } catch (_) {
-      // Polling retries automatically.
+      // The two-second synchronization loop retries automatically.
     }
   }
 

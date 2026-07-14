@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../core/app_locale.dart';
@@ -6,6 +9,7 @@ import '../models/runtime_config.dart';
 import '../models/session.dart';
 import '../services/api_client.dart';
 import '../services/session_store.dart';
+import '../services/push_notification_service.dart';
 
 class PassengerController extends ChangeNotifier {
   PassengerController(this.api, this.store);
@@ -24,6 +28,9 @@ class PassengerController extends ChangeNotifier {
   String? _otpSessionId;
   String profileName = '';
   String? profilePhotoUrl;
+  StreamSubscription<RemoteMessage>? _pushMessageSubscription;
+  StreamSubscription<RemoteMessage>? _pushOpenedSubscription;
+  bool _pushInitialized = false;
 
   Future<void> bootstrap() async {
     loading = true;
@@ -50,6 +57,7 @@ class PassengerController extends ChangeNotifier {
       if (session != null) {
         await refreshProfile();
         await restoreActiveBooking();
+        await _initializePush();
 
         if ('${profile['fullName'] ?? ''}'.trim().isEmpty &&
             profileName.trim().isNotEmpty) {
@@ -126,6 +134,8 @@ class PassengerController extends ChangeNotifier {
     profile = passenger;
     profileName = '${passenger['fullName'] ?? ''}';
     profilePhotoUrl = passenger['photoUrl']?.toString();
+    await restoreActiveBooking();
+    await _initializePush();
     notifyListeners();
   }
 
@@ -277,6 +287,40 @@ class PassengerController extends ChangeNotifier {
     }
   }
 
+  Future<void> _initializePush() async {
+    if (_pushInitialized || session == null) return;
+    _pushInitialized = true;
+
+    final service = PushNotificationService(api);
+    final token = await service.initialize(
+      actorType: 'passenger',
+      actorId: session!.userId,
+      deviceId: 'passenger-${session!.userId}',
+      locale: locale?.languageCode ?? 'en',
+      appVersion: '3.16.0+334',
+    );
+
+    if (token == null) {
+      _pushInitialized = false;
+      return;
+    }
+
+    _pushMessageSubscription ??=
+        FirebaseMessaging.onMessage.listen((message) {
+      unawaited(restoreActiveBooking());
+    });
+    _pushOpenedSubscription ??=
+        FirebaseMessaging.onMessageOpenedApp.listen((message) {
+      unawaited(restoreActiveBooking());
+    });
+
+    final initial =
+        await FirebaseMessaging.instance.getInitialMessage();
+    if (initial != null) {
+      await restoreActiveBooking();
+    }
+  }
+
   void resumeBooking(Map<String, dynamic> booking) {
     activeBooking = Map<String, dynamic>.from(booking);
     notifyListeners();
@@ -378,6 +422,11 @@ class PassengerController extends ChangeNotifier {
       await api.postJson('/v1/auth/logout', const {});
     } catch (_) {}
 
+    await _pushMessageSubscription?.cancel();
+    await _pushOpenedSubscription?.cancel();
+    _pushMessageSubscription = null;
+    _pushOpenedSubscription = null;
+    _pushInitialized = false;
     await store.clear();
     api.token = null;
     session = null;
@@ -390,4 +439,11 @@ class PassengerController extends ChangeNotifier {
   }
 
   String t(String key) => locale?.t(key) ?? key;
+  @override
+  void dispose() {
+    _pushMessageSubscription?.cancel();
+    _pushOpenedSubscription?.cancel();
+    super.dispose();
+  }
+
 }

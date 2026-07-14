@@ -3,3 +3,15 @@ export function registerDevice(payload){const key=`${payload.actorType}:${payloa
 export function deactivateDevice(actorType,actorId,deviceId){const key=`${actorType}:${actorId}:${deviceId}`;const x=devices.get(key);if(!x)return null;x.active=false;x.updatedAt=new Date().toISOString();return structuredClone(x);}
 export function listDevices(actorType,actorId){return [...devices.values()].filter(x=>x.actorType===actorType&&x.actorId===actorId&&x.active).map(x=>structuredClone(x));}
 export function allDevices(){return [...devices.values()].map(x=>structuredClone(x));}
+
+
+export function exportDeviceStoreState(){
+  return {devices:[...devices.entries()]};
+}
+
+export function restoreDeviceStoreState(state={}){
+  devices.clear();
+  for(const [key,value] of state.devices||[]){
+    devices.set(key,value);
+  }
+}

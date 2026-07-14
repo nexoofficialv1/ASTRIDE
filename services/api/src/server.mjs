@@ -151,6 +151,161 @@ const publicNearbyDriverMarker=(driver,index)=>({
   lng:Number(Number(driver.location.lng).toFixed(3)),
   distanceToPickupKm:driver.distanceToPickupKm,
 });
+
+const searchingBookingIsFresh=(booking,maxAgeMs=30*60_000)=>{
+  const startedAt=Date.parse(
+    booking.searchStartedAt ||
+    booking.updatedAt ||
+    booking.createdAt ||
+    0
+  );
+  return Number.isFinite(startedAt) &&
+    Date.now()-startedAt<=maxAgeMs;
+};
+
+const driverRequestItems=(driver,cfg)=>{
+  if(
+    !driver ||
+    !driver.approved ||
+    driver.suspended ||
+    !driver.online ||
+    !validPoint(driver.location) ||
+    driverBusyBooking(driver.id)
+  ){
+    return [];
+  }
+
+  const radius=Number(cfg.booking.searchRadiusKm||8);
+  return listAllBookings()
+    .filter((booking)=>
+      booking.status==='SEARCHING' &&
+      !booking.driverId &&
+      validPoint(booking.pickup) &&
+      searchingBookingIsFresh(booking)
+    )
+    .map((booking)=>{
+      const candidate=dispatchCandidatesForBooking(booking,radius)
+        .find((item)=>item.id===driver.id);
+      return candidate
+        ?{
+            ...booking,
+            distanceToPickupKm:candidate.distanceToPickupKm,
+          }
+        :null;
+    })
+    .filter(Boolean)
+    .sort((a,b)=>{
+      const timeDifference=
+        Date.parse(b.searchStartedAt||b.createdAt||0)-
+        Date.parse(a.searchStartedAt||a.createdAt||0);
+      if(timeDifference!==0)return timeDifference;
+      return a.distanceToPickupKm-b.distanceToPickupKm;
+    })
+    .slice(0,10);
+};
+
+const deliverPushToActor=async({
+  actorType,
+  actorId,
+  type,
+  title,
+  body,
+  payload={},
+})=>{
+  const cfg=getAdminRuntimeConfig();
+  const provider=cfg.providers.notifications.active;
+  const mode=cfg.providers.notifications.mode;
+  const devices=listDevices(actorType,actorId);
+  if(!devices.length)return {attempted:0,delivered:0};
+
+  const adapter=getNotificationAdapter(provider);
+  const results=await Promise.allSettled(
+    devices.map(async(device)=>{
+      const record=addNotification({
+        audience:`${actorType.toUpperCase()}:${actorId}`,
+        type,
+        payload:{...payload,actorType,actorId},
+      });
+      try{
+        const sent=await adapter.send({
+          id:record.id,
+          deviceToken:device.pushToken,
+          type,
+          title,
+          body,
+          payload:{...payload,type},
+          channelId:type==='NEW_RIDE_REQUEST'
+            ?'astride_rides'
+            :'astride_updates',
+        },mode);
+        updateNotification(record.id,{
+          status:sent.accepted?'SENT':'FAILED',
+          attempts:1,
+          provider:sent.provider,
+        });
+        return sent;
+      }catch(error){
+        updateNotification(record.id,{
+          status:'FAILED',
+          attempts:1,
+          provider,
+          error:error.message,
+        });
+        throw error;
+      }
+    })
+  );
+
+  return {
+    attempted:devices.length,
+    delivered:results.filter(
+      item=>item.status==='fulfilled'
+    ).length,
+  };
+};
+
+const notifyEligibleDrivers=async(booking,cfg)=>{
+  const candidates=dispatchCandidatesForBooking(
+    booking,
+    Number(cfg.booking.searchRadiusKm||8),
+  ).slice(0,Number(cfg.booking.maxDriverAttempts||10));
+
+  await Promise.allSettled(
+    candidates.map((driver)=>
+      deliverPushToActor({
+        actorType:'driver',
+        actorId:driver.id,
+        type:'NEW_RIDE_REQUEST',
+        title:'New ASTRIDE ride request',
+        body:`Pickup ${driver.distanceToPickupKm.toFixed(1)} km away`,
+        payload:{
+          bookingId:booking.id,
+          rideType:booking.rideType||'FULL_TOTO',
+          distanceToPickupKm:
+            driver.distanceToPickupKm.toFixed(2),
+          pickupAddress:booking.pickupAddress||'Pickup location',
+        },
+      })
+    )
+  );
+};
+
+const notifyPassengerDriverAccepted=async(booking)=>{
+  if(!booking?.passengerId||!booking?.driverId)return;
+  const profile=getDriverProfile(booking.driverId);
+  await deliverPushToActor({
+    actorType:'passenger',
+    actorId:booking.passengerId,
+    type:'DRIVER_ACCEPTED',
+    title:'Driver accepted your ride',
+    body:`${profile?.fullName||'Your Driver'} is on the way`,
+    payload:{
+      bookingId:booking.id,
+      driverId:booking.driverId,
+      status:booking.status,
+    },
+  });
+};
 export const server=http.createServer(async(req,res)=>{res.once('finish',schedulePersistenceFlush);try{const url=new URL(req.url,'http://localhost');const path=url.pathname;
 if(req.method==='GET'&&(path==='/'||path==='/admin'||path==='/admin/')){
   if(sendStaticFile(res,pathModule.join(adminWebRoot,'index.html')))return;
@@ -170,7 +325,7 @@ const driverUser=authenticateDriverToken(req.headers.authorization)||staffDriver
 const requirePassenger=(id=null)=>{if(!passengerUser){json(res,401,{error:'passenger_auth_required'});return false;}if(id&&passengerUser.id!==id){json(res,403,{error:'passenger_scope_denied'});return false;}return true;};
 const requireDriver=(id=null)=>{if(!driverUser){json(res,401,{error:'driver_auth_required'});return false;}if(id&&driverUser.id!==id){json(res,403,{error:'driver_scope_denied'});return false;}return true;};
 const canAccessBooking=(b)=>Boolean(b&&(adminUser&&adminCan(adminUser,'rides.read')||passengerUser&&b.passengerId===passengerUser.id||driverUser&&b.driverId===driverUser.id));
-if(req.method==='GET'&&path==='/health')return json(res,200,{ok:true,service:'local-ride-api',version:'3.16.4-ride-safety-contact',architecture:'mobile-first'});if(req.method==='GET'&&/^\/v1\/uploads\/[^/]+\/[^/]+\/[^/]+$/.test(path)){
+if(req.method==='GET'&&path==='/health')return json(res,200,{ok:true,service:'local-ride-api',version:'3.16.6-realtime-dispatch-sync',architecture:'mobile-first'});if(req.method==='GET'&&/^\/v1\/uploads\/[^/]+\/[^/]+\/[^/]+$/.test(path)){
   const parts=path.split('/');
   const actorType=safeUploadSegment(parts[3]).toLowerCase();
   const actorId=safeUploadSegment(parts[4]);
@@ -254,12 +409,33 @@ const legacyPartnerUser=path.startsWith('/v1/partner/')?authenticatePartner(req.
 const staffPartnerProfile=staffUser&&['PROMOTER','AREA_PROMOTER'].includes(staffUser.role)&&staffUser.linkedEntityId?getPromoter(staffUser.linkedEntityId):null;
 const partnerUser=legacyPartnerUser||staffPartnerProfile;
 const requirePartner=()=>{if(!partnerUser){json(res,401,{error:'partner_auth_required'});return false;}return true;};
-if(req.method==='GET'&&path==='/v1/partner/me'){if(!requirePartner())return;return json(res,200,{partner:partnerUser});}if(req.method==='PATCH'&&path==='/v1/partner/me'){
+if(req.method==='GET'&&path==='/v1/partner/me'){
   if(!requirePartner())return;
-  const updated=updatePromoterProfile(partnerUser.id,await readBody(req));
-  return updated
-    ?json(res,200,{partner:updated})
-    :json(res,404,{error:'partner_not_found'});
+  return json(res,200,{partner:partnerUser});
+}
+if(req.method==='PATCH'&&path==='/v1/partner/me'){
+  if(!requirePartner())return;
+  const payload=await readBody(req);
+  const updated=updatePromoterProfile(partnerUser.id,payload);
+  if(!updated){
+    return json(res,404,{error:'partner_not_found'});
+  }
+
+  const linkedStaff=listStaffAccounts().find(
+    item=>item.linkedEntityId===partnerUser.id &&
+      ['PROMOTER','AREA_PROMOTER'].includes(item.role)
+  );
+  const staff=linkedStaff
+    ?updateStaffAccount(linkedStaff.id,{
+        name:updated.name,
+        areaId:updated.areaId||linkedStaff.areaId||null,
+      })
+    :null;
+
+  schedulePersistenceFlush();
+  await flushPersistence();
+
+  return json(res,200,{partner:updated,staff});
 }
 if(req.method==='POST'&&path==='/v1/uploads'){
   const actor=passengerUser
@@ -501,6 +677,29 @@ if(req.method==='POST'&&path==='/v1/admin/partners/create'){
     if(!['PROMOTER','AREA_PROMOTER'].includes(role)){
       return json(res,422,{error:'invalid_partner_role'});
     }
+    const normalizedMobile=String(p.mobile).replace(/\D/g,'');
+    const normalizedLoginId=String(p.loginId||'').trim().toLowerCase();
+    const duplicatePartner=listPromoters().find(item=>
+      String(item.mobile||'').replace(/\D/g,'')===normalizedMobile
+    );
+    const duplicateStaff=listStaffAccounts().find(item=>
+      String(item.mobile||'').replace(/\D/g,'')===normalizedMobile ||
+      (
+        normalizedLoginId &&
+        String(item.loginId||'').trim().toLowerCase()===
+          normalizedLoginId
+      )
+    );
+    if(duplicatePartner||duplicateStaff){
+      return json(res,409,{
+        error:'partner_already_registered',
+        existingPartnerId:
+          duplicatePartner?.id||
+          duplicateStaff?.linkedEntityId||
+          null,
+        existingStaffId:duplicateStaff?.id||null,
+      });
+    }
     let areaPromoter=null;
     if(role==='PROMOTER'&&p.areaPromoterId){
       areaPromoter=getPromoter(String(p.areaPromoterId));
@@ -514,7 +713,7 @@ if(req.method==='POST'&&path==='/v1/admin/partners/create'){
     }
     const partner=upsertPromoter({
       role,
-      mobile:String(p.mobile).replace(/\D/g,''),
+      mobile:normalizedMobile,
       name:p.name,
       status:'ACTIVE',
       areaPromoterId:role==='PROMOTER'
@@ -524,7 +723,7 @@ if(req.method==='POST'&&path==='/v1/admin/partners/create'){
     });
     const staff=createStaffAccount({
       role,
-      mobile:String(p.mobile).replace(/\D/g,''),
+      mobile:normalizedMobile,
       loginId:p.loginId||partner.id,
       name:p.name,
       password:p.temporaryPassword,
@@ -539,6 +738,10 @@ if(req.method==='POST'&&path==='/v1/admin/partners/create'){
       role,
       areaPromoterId:partner.areaPromoterId||null,
     });
+
+    schedulePersistenceFlush();
+    await flushPersistence();
+
     return json(res,201,{partner,staff,areaPromoter});
   }catch(error){return json(res,422,{error:error.message});}
 }
@@ -852,36 +1055,37 @@ if(req.method==='PUT'&&/^\/v1\/driver-profiles\/[^/]+\/online$/.test(path)){cons
   )||null;
   return json(res,200,{booking});
 }
+if(req.method==='GET'&&path==='/v1/driver/sync'){
+  if(!driverUser)return json(res,401,{error:'driver_auth_required'});
+  const cfg=getAdminRuntimeConfig();
+  const activeRide=listAllBookings().find((item)=>
+    item.driverId===driverUser.id &&
+    dispatchActiveStatuses.has(item.status)
+  )||null;
+  const requests=activeRide
+    ?[]
+    :driverRequestItems(driverUser,cfg);
+
+  return json(res,200,{
+    serverTime:new Date().toISOString(),
+    online:Boolean(driverUser.online),
+    eligible:Boolean(
+      driverUser.approved &&
+      !driverUser.suspended &&
+      validPoint(driverUser.location)
+    ),
+    activeRide,
+    request:requests[0]||null,
+    requestCount:requests.length,
+  });
+}
 if(req.method==='GET'&&path==='/v1/driver/requests'){
   if(!driverUser)return json(res,401,{error:'driver_auth_required'});
-  if(
-    !driverUser.approved ||
-    driverUser.suspended ||
-    !driverUser.online ||
-    !validPoint(driverUser.location) ||
-    driverBusyBooking(driverUser.id)
-  ){
-    return json(res,200,{items:[]});
-  }
   const cfg=getAdminRuntimeConfig();
-  const radius=Number(cfg.booking.searchRadiusKm||8);
-  const items=listAllBookings()
-    .filter((booking)=>
-      booking.status==='SEARCHING' &&
-      !booking.driverId &&
-      validPoint(booking.pickup)
-    )
-    .map((booking)=>{
-      const candidate=dispatchCandidatesForBooking(booking,radius)
-        .find((driver)=>driver.id===driverUser.id);
-      return candidate
-        ?{...booking,distanceToPickupKm:candidate.distanceToPickupKm}
-        :null;
-    })
-    .filter(Boolean)
-    .sort((a,b)=>a.distanceToPickupKm-b.distanceToPickupKm)
-    .slice(0,10);
-  return json(res,200,{items});
+  return json(res,200,{
+    items:driverRequestItems(driverUser,cfg),
+    serverTime:new Date().toISOString(),
+  });
 }
 
 if(req.method==='GET'&&/^\/v1\/driver-profiles\/[^/]+\/wallet$/.test(path)){const id=path.split('/')[3];if(!requireDriver(id))return;const w=getDriverWallet(id);return w?json(res,200,w):json(res,404,{error:'wallet_not_found'});}
@@ -891,7 +1095,7 @@ if(req.method==='PATCH'&&/^\/v1\/admin\/settlements\/[^/]+$/.test(path)){if(!req
 
 if(req.method==='PUT'&&/^\/v1\/drivers\/[^/]+\/availability$/.test(path)){const id=path.split('/')[3];if(!requireDriver(id))return;const p=await readBody(req);requireFields(p,['online']);if(p.online&&!validPoint(p.location))throw new Error('Location required when driver goes online');return json(res,200,upsertDriver(id,{online:Boolean(p.online),location:p.location||null,rating:p.rating||5,approved:p.approved!==false}));}
 if(req.method==='GET'&&/^\/v1\/drivers\/[^/]+$/.test(path)){const id=path.split('/')[3];if(!requireDriver(id))return;const d=getDriver(id);return d?json(res,200,d):json(res,404,{error:'driver_not_found'});}
-if(req.method==='POST'&&path==='/v1/bookings'){if(!requirePassenger())return;const cfg=getAdminRuntimeConfig();const p=await readBody(req);requireFields(p,['passengerId','pickup','destination']);if(p.passengerId!==passengerUser.id)return json(res,403,{error:'passenger_scope_denied'});const existingActive=listBookingsForPassenger(p.passengerId).find((item)=>['SEARCHING','DRIVER_ASSIGNED','DRIVER_ARRIVING','DRIVER_ARRIVED','OTP_VERIFIED','IN_PROGRESS'].includes(item.status));if(existingActive)return json(res,200,{...existingActive,reused:true});const rl=hitRateLimit(`booking:${p.passengerId}`,cfg.safety.maxBookingsPerPassengerPerHour,3600_000);if(!rl.allowed)return json(res,429,{error:'booking_rate_limited',retryAfterMs:rl.retryAfterMs});if(!cfg.operations.serviceEnabled||!cfg.operations.newBookingsEnabled)return json(res,503,{error:'booking_service_disabled'});if(cfg.maintenanceMode)return json(res,503,{error:'maintenance_mode'});if(!validPoint(p.pickup)||!validPoint(p.destination))throw new Error('Invalid pickup or destination');const risk=evaluateBookingRisk({passengerId:p.passengerId,pickup:p.pickup,destination:p.destination,recentBookingCount:rl.count-1});if(risk.level==='HIGH')addRiskEvent({type:'BOOKING_RISK',severity:'HIGH',actorId:p.passengerId,metadata:risk});const fareEstimate=p.rideType&&p.distanceKm?calculateFareQuote(p,cfg.businessRules):estimateFare({pickup:p.pickup,destination:p.destination,fare:cfg.fare});if(p.rideType){const availability=serviceAvailability({rideType:p.rideType,isOutsideArea:Boolean(p.isOutsideArea),isNight:Boolean(p.isNight),motorcycleAvailable:p.motorcycleAvailable!==false});if(!availability.available)return json(res,422,{error:availability.reason});}let shareMeta={};if(p.rideType==='SHARE_TOTO'){requireFields(p,['shareRouteId','pickupStopId','dropStopId','seats']);const route=getShareRoute(p.shareRouteId);if(!route||route.enabled===false)return json(res,422,{error:'share_route_unavailable'});const direction=p.routeDirection||'FORWARD';const probe=canPoolBooking({route,session:{bookings:[],capacity:Number(p.capacity||4),direction},pickupStopId:p.pickupStopId,dropStopId:p.dropStopId,seats:Number(p.seats),direction,capacity:Number(p.capacity||4)});if(!probe.valid)return json(res,422,{error:probe.reason,details:probe});shareMeta={shareRouteId:route.id,pickupStopId:p.pickupStopId,dropStopId:p.dropStopId,seats:Number(p.seats),routeDirection:direction};}let appliedOffer=null;const fareAmount=Number(fareEstimate.amount??fareEstimate.total??0);if(p.offerCode){const preview=validateOfferCode({code:p.offerCode,actorType:'PASSENGER',actorId:p.passengerId,amount:fareAmount,areaId:p.pickupZoneId||p.areaId||null,cityId:p.cityId||null,rideType:p.rideType||null,isNewUser:Boolean(p.isNewUser)});if(!preview.valid)return json(res,422,{error:preview.reason,offer:preview.campaign||null});appliedOffer={campaignId:preview.campaign.id,offerCode:p.offerCode,rewardAmount:preview.rewardAmount};fareEstimate.originalAmount=fareAmount;fareEstimate.discount=preview.rewardAmount;if('amount' in fareEstimate)fareEstimate.amount=Math.max(0,fareAmount-preview.rewardAmount);if('total' in fareEstimate)fareEstimate.total=Math.max(0,fareAmount-preview.rewardAmount);}const booking=createBooking({...p,passengerName:passengerUser.fullName||p.passengerName||'Passenger',passengerMobile:passengerUser.mobile||p.passengerMobile||null,...shareMeta,paymentPreference:p.paymentPreference||'BOTH',saferideEnabled:Boolean(p.saferideEnabled),fareEstimate,appliedOffer,risk});if(appliedOffer)redeemOfferCode({code:p.offerCode,eventId:`booking:${booking.id}`,actorId:p.passengerId,amount:fareAmount,areaId:p.pickupZoneId||p.areaId||null,cityId:p.cityId||null,rideType:p.rideType||null,isNewUser:Boolean(p.isNewUser),bookingId:booking.id});return json(res,201,updateBooking(booking.id,{status:'SEARCHING'},'DRIVER_SEARCH_STARTED'));}
+if(req.method==='POST'&&path==='/v1/bookings'){if(!requirePassenger())return;const cfg=getAdminRuntimeConfig();const p=await readBody(req);requireFields(p,['passengerId','pickup','destination']);if(p.passengerId!==passengerUser.id)return json(res,403,{error:'passenger_scope_denied'});const existingActive=listBookingsForPassenger(p.passengerId).find((item)=>['SEARCHING','DRIVER_ASSIGNED','DRIVER_ARRIVING','DRIVER_ARRIVED','OTP_VERIFIED','IN_PROGRESS'].includes(item.status));if(existingActive)return json(res,200,{...existingActive,reused:true});const rl=hitRateLimit(`booking:${p.passengerId}`,cfg.safety.maxBookingsPerPassengerPerHour,3600_000);if(!rl.allowed)return json(res,429,{error:'booking_rate_limited',retryAfterMs:rl.retryAfterMs});if(!cfg.operations.serviceEnabled||!cfg.operations.newBookingsEnabled)return json(res,503,{error:'booking_service_disabled'});if(cfg.maintenanceMode)return json(res,503,{error:'maintenance_mode'});if(!validPoint(p.pickup)||!validPoint(p.destination))throw new Error('Invalid pickup or destination');const risk=evaluateBookingRisk({passengerId:p.passengerId,pickup:p.pickup,destination:p.destination,recentBookingCount:rl.count-1});if(risk.level==='HIGH')addRiskEvent({type:'BOOKING_RISK',severity:'HIGH',actorId:p.passengerId,metadata:risk});const fareEstimate=p.rideType&&p.distanceKm?calculateFareQuote(p,cfg.businessRules):estimateFare({pickup:p.pickup,destination:p.destination,fare:cfg.fare});if(p.rideType){const availability=serviceAvailability({rideType:p.rideType,isOutsideArea:Boolean(p.isOutsideArea),isNight:Boolean(p.isNight),motorcycleAvailable:p.motorcycleAvailable!==false});if(!availability.available)return json(res,422,{error:availability.reason});}let shareMeta={};if(p.rideType==='SHARE_TOTO'){requireFields(p,['shareRouteId','pickupStopId','dropStopId','seats']);const route=getShareRoute(p.shareRouteId);if(!route||route.enabled===false)return json(res,422,{error:'share_route_unavailable'});const direction=p.routeDirection||'FORWARD';const probe=canPoolBooking({route,session:{bookings:[],capacity:Number(p.capacity||4),direction},pickupStopId:p.pickupStopId,dropStopId:p.dropStopId,seats:Number(p.seats),direction,capacity:Number(p.capacity||4)});if(!probe.valid)return json(res,422,{error:probe.reason,details:probe});shareMeta={shareRouteId:route.id,pickupStopId:p.pickupStopId,dropStopId:p.dropStopId,seats:Number(p.seats),routeDirection:direction};}let appliedOffer=null;const fareAmount=Number(fareEstimate.amount??fareEstimate.total??0);if(p.offerCode){const preview=validateOfferCode({code:p.offerCode,actorType:'PASSENGER',actorId:p.passengerId,amount:fareAmount,areaId:p.pickupZoneId||p.areaId||null,cityId:p.cityId||null,rideType:p.rideType||null,isNewUser:Boolean(p.isNewUser)});if(!preview.valid)return json(res,422,{error:preview.reason,offer:preview.campaign||null});appliedOffer={campaignId:preview.campaign.id,offerCode:p.offerCode,rewardAmount:preview.rewardAmount};fareEstimate.originalAmount=fareAmount;fareEstimate.discount=preview.rewardAmount;if('amount' in fareEstimate)fareEstimate.amount=Math.max(0,fareAmount-preview.rewardAmount);if('total' in fareEstimate)fareEstimate.total=Math.max(0,fareAmount-preview.rewardAmount);}const booking=createBooking({...p,passengerName:passengerUser.fullName||p.passengerName||'Passenger',passengerMobile:passengerUser.mobile||p.passengerMobile||null,...shareMeta,paymentPreference:p.paymentPreference||'BOTH',saferideEnabled:Boolean(p.saferideEnabled),fareEstimate,appliedOffer,risk});if(appliedOffer)redeemOfferCode({code:p.offerCode,eventId:`booking:${booking.id}`,actorId:p.passengerId,amount:fareAmount,areaId:p.pickupZoneId||p.areaId||null,cityId:p.cityId||null,rideType:p.rideType||null,isNewUser:Boolean(p.isNewUser),bookingId:booking.id});const searchingBooking=updateBooking(booking.id,{status:'SEARCHING',searchStartedAt:new Date().toISOString()},'DRIVER_SEARCH_STARTED');void notifyEligibleDrivers(searchingBooking,cfg);return json(res,201,searchingBooking);}
 if(req.method==='GET'&&/^\/v1\/passengers\/[^/]+\/bookings$/.test(path)){const id=path.split('/')[3];if(!requirePassenger(id))return;return json(res,200,{items:listBookingsForPassenger(id)});}if(req.method==='GET'&&path==='/v1/passenger/active-booking'){if(!requirePassenger())return;const booking=listBookingsForPassenger(passengerUser.id).find((item)=>['SEARCHING','DRIVER_ASSIGNED','DRIVER_ARRIVING','DRIVER_ARRIVED','OTP_VERIFIED','IN_PROGRESS'].includes(item.status))||null;return json(res,200,{booking});}
 if(req.method==='GET'&&/^\/v1\/bookings\/[^/]+\/dispatch-status$/.test(path)){
   const bookingId=path.split('/')[3];
@@ -1050,6 +1254,8 @@ if(req.method==='POST'&&/^\/v1\/bookings\/[^/]+\/driver-cancel$/.test(path)){
     },
     'DRIVER_CANCELLED_RESEARCH_STARTED',
   );
+  const cfg=getAdminRuntimeConfig();
+  void notifyEligibleDrivers(updated,cfg);
   return json(res,200,{
     booking:updated,
     message:'Driver cancelled. Searching for another eligible driver.',
@@ -1066,7 +1272,11 @@ if(req.method==='POST'&&/^\/v1\/bookings\/[^/]+\/accept$/.test(path)){
   if(out.error){
     return json(res,out.error==='booking_not_found'?404:409,out);
   }
-  return json(res,200,out);
+  void notifyPassengerDriverAccepted(out.booking);
+  return json(res,200,{
+    ...out,
+    synchronizedAt:new Date().toISOString(),
+  });
 }
 if(req.method==='POST'&&/^\/v1\/bookings\/[^/]+\/transition$/.test(path)){
   const id=path.split('/')[3];
