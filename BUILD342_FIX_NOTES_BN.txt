@@ -1,0 +1,8 @@
+ASTRIDE Build 342
+
+Fixes:
+1. Legacy tests/mobile-v23-build-pipeline.mjs no longer forces the patch version to .0.
+2. Full semantic versions such as 3.18.2+342 are accepted.
+3. Passenger, Driver and Partner pubspec versions are 3.18.2+342.
+4. Android Three Apps workflow default build number is 342.
+5. Build 342 Flutter analyzer fixes remain included.
