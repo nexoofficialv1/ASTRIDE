@@ -117,7 +117,7 @@ class _DriverDetailsScreenState extends State<DriverDetailsScreen> {
         title: const Text('Send driver note'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           DropdownButtonFormField<String>(
-            value: type,
+            initialValue: type,
             items: const [
               DropdownMenuItem(value: 'COACHING', child: Text('Coaching')),
               DropdownMenuItem(value: 'WARNING', child: Text('Warning')),

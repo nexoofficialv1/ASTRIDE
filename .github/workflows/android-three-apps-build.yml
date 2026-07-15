@@ -21,7 +21,7 @@ on:
         required: true
       build_number:
         description: Android version code
-        default: '340'
+        default: '341'
         required: true
 
 permissions:

@@ -1,0 +1,13 @@
+ASTRIDE Three-App Build 341 — Flutter 3.41 Analyzer Correction
+===============================================================
+
+GitHub Actions failure corrected:
+1. Driver and Passenger provider_map.dart:
+   Color.withOpacity(0.82) -> Color.withValues(alpha: 0.82)
+2. Partner partner_drivers_screen.dart:
+   DropdownButtonFormField value -> initialValue
+3. All three pubspec versions advanced to 3.18.2+341.
+4. Workflow default Android build number advanced to 341.
+5. Source validator now blocks these deprecated APIs before Flutter analyze.
+
+The analyzer remains strict. No warning suppression or --no-fatal-infos workaround was added.

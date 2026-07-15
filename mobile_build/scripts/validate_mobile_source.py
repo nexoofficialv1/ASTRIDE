@@ -32,6 +32,23 @@ for app in apps:
     for f in (base/'assets/locales').glob('*.json'):
         try: json.loads(f.read_text(encoding='utf-8'))
         except Exception as e: errors.append(f'{app}: invalid locale {f.name}: {e}')
+    # Flutter 3.41+ deprecation guards. Keep analyzer strict instead of suppressing infos.
+    for f in (base/'lib').rglob('*.dart'):
+        text=f.read_text(encoding='utf-8')
+        if '.withOpacity(' in text:
+            errors.append(f'{app}: deprecated Color.withOpacity in {f.relative_to(root)}; use withValues(alpha: ...)')
+        lines=text.splitlines()
+        for idx,line in enumerate(lines):
+            if 'DropdownButtonFormField' not in line:
+                continue
+            head=[]
+            for following in lines[idx+1:idx+20]:
+                if re.match(r'\s*items\s*:', following):
+                    break
+                head.append(following)
+            if any(re.match(r'\s*value\s*:', following) for following in head):
+                errors.append(f'{app}: deprecated DropdownButtonFormField.value in {f.relative_to(root)}; use initialValue')
+                break
 for env in ('production','staging'):
     f=root/'mobile_build/environments'/f'{env}.json'
     try: data=json.loads(f.read_text(encoding='utf-8'))

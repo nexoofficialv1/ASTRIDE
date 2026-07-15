@@ -1,0 +1,37 @@
+ASTRIDE Three-App Mobile Source — Build 341 Validation
+======================================================
+
+Version: 3.18.2+341
+Production API: https://astaride.nexoofficial.in
+Production WS: wss://astaride.nexoofficial.in
+Target Flutter in GitHub Actions: 3.41.6 stable
+
+Corrections verified:
+- Passenger provider map: deprecated Color.withOpacity removed
+- Driver provider map: deprecated Color.withOpacity removed
+- Partner driver-note dropdown: deprecated DropdownButtonFormField.value removed
+- All three app build numbers advanced to 341
+- GitHub Actions default build number advanced to 341
+- Preflight validator now rejects these deprecated APIs
+
+Local source checks completed:
+- Passenger maintained Flutter source: PASS
+- Driver maintained Flutter source: PASS
+- Partner maintained Flutter source: PASS
+- Mobile source validator: PASS
+- Workflow/pubspec YAML parse: PASS
+- JSON configuration parse: PASS
+- Python helper syntax: PASS
+- Shell helper syntax: PASS
+- Dart delimiter/structural scan: PASS
+- Production HTTPS/WSS config validation: PASS
+- User-supplied server credential leak scan: PASS
+- Deprecated API source scan: PASS
+
+Not performed in this runtime:
+- flutter analyze/test (Flutter SDK is not installed here)
+- Android Gradle compile
+- Actual APK signing
+- Real-device installation and end-to-end ride test
+
+Run GitHub Actions workflow “ASTRIDE Three APK Build” with build_number 341.
