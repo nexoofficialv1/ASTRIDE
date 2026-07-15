@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../core/app_config.dart';
 import '../design/astride_theme.dart';
 import '../services/live_service.dart';
 import '../services/payment_gateway.dart';
@@ -237,19 +238,30 @@ class _RideStatusScreenState extends State<RideStatusScreen> {
         ],
       );
 
-  Widget _driverCard(String Function(String) t) => Column(
+  String _mediaUrl(dynamic value) {
+    final raw='${value ?? ''}'.trim();
+    if(raw.isEmpty)return '';
+    if(raw.startsWith('http://')||raw.startsWith('https://'))return raw;
+    final base=AppConfig.apiBaseUrl.replaceAll(RegExp(r'/+$'),'');
+    return '$base${raw.startsWith('/') ? raw : '/$raw'}';
+  }
+
+  Widget _driverCard(String Function(String) t) {
+    final photo=_mediaUrl(assignedDriver?['photoUrl']);
+    return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const CircleAvatar(
+              CircleAvatar(
                 radius: 28,
-                backgroundColor: Color(0x1422C55E),
-                child: Icon(
+                backgroundColor: const Color(0x1422C55E),
+                backgroundImage:photo.isEmpty?null:NetworkImage(photo,headers:widget.controller.session?.authHeaders),
+                child:photo.isEmpty?const Icon(
                   Icons.person_rounded,
                   color: AstrideColors.green,
                   size: 30,
-                ),
+                ):null,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -359,6 +371,7 @@ class _RideStatusScreenState extends State<RideStatusScreen> {
           ),
         ],
       );
+  }
 
   Widget _metric(
     IconData icon,

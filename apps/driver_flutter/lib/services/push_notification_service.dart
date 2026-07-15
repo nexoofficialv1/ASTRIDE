@@ -26,20 +26,29 @@ class PushNotificationService {
       final raw = providers is Map
           ? providers['firebase']
           : null;
-      if (raw is! Map) return null;
 
       if (Firebase.apps.isEmpty) {
-        await Firebase.initializeApp(
-          options: FirebaseOptions(
-            apiKey: '${raw['apiKey']}',
-            appId: '${raw['appId']}',
-            messagingSenderId: '${raw['messagingSenderId']}',
-            projectId: '${raw['projectId']}',
-            authDomain: raw['authDomain']?.toString(),
-            storageBucket: raw['storageBucket']?.toString(),
-            measurementId: raw['measurementId']?.toString(),
-          ),
-        );
+        if (raw is Map &&
+            '${raw['apiKey']}'.isNotEmpty &&
+            '${raw['appId']}'.isNotEmpty &&
+            '${raw['messagingSenderId']}'.isNotEmpty &&
+            '${raw['projectId']}'.isNotEmpty) {
+          await Firebase.initializeApp(
+            options: FirebaseOptions(
+              apiKey: '${raw['apiKey']}',
+              appId: '${raw['appId']}',
+              messagingSenderId: '${raw['messagingSenderId']}',
+              projectId: '${raw['projectId']}',
+              authDomain: raw['authDomain']?.toString(),
+              storageBucket: raw['storageBucket']?.toString(),
+              measurementId: raw['measurementId']?.toString(),
+            ),
+          );
+        } else {
+          // Android release builds receive FirebaseOptions from the injected
+          // google-services.json through the Google Services Gradle plugin.
+          await Firebase.initializeApp();
+        }
       }
 
       final messaging = FirebaseMessaging.instance;

@@ -8,15 +8,15 @@ APP_DIR="$ROOT/apps/$APP"
 case "$APP" in
   passenger_flutter)
     PROJECT_NAME="astride_passenger"
-    ORG="com.astride"
+    ORG="com.nexo.astride"
     ;;
   driver_flutter)
     PROJECT_NAME="astride_driver"
-    ORG="com.astride"
+    ORG="com.nexo.astride"
     ;;
   partner_flutter)
     PROJECT_NAME="astride_partner"
-    ORG="com.astride"
+    ORG="com.nexo.astride"
     ;;
   *)
     echo "Unsupported app: $APP" >&2

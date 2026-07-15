@@ -23,6 +23,9 @@ class _DriverRootState extends State<DriverRoot> {
     if (c.loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
+    if (c.error != null && c.session != null && c.profile.isEmpty) {
+      return _StartupFailure(controller: c, message: c.error!);
+    }
     if (c.locale == null) return _LanguageScreen(controller: c);
     if (c.session == null) return _PasswordLogin(controller: c);
     if (c.mustChangePassword) return _ChangePassword(controller: c);
@@ -37,6 +40,65 @@ class _DriverRootState extends State<DriverRoot> {
     }
     return DriverShell(controller: c);
   }
+}
+
+class _StartupFailure extends StatelessWidget {
+  const _StartupFailure({required this.controller, required this.message});
+
+  final DriverController controller;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const AstrideWordmark(),
+                  const SizedBox(height: 32),
+                  const Icon(
+                    Icons.cloud_off_rounded,
+                    size: 58,
+                    color: AstrideColors.green,
+                  ),
+                  const SizedBox(height: 18),
+                  const Text(
+                    'Unable to finish startup',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      color: AstrideColors.navy,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: AstrideColors.muted),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: controller.bootstrap,
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Retry'),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: controller.logout,
+                    child: const Text('Clear saved session and sign in again'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
 }
 
 class _LanguageScreen extends StatelessWidget {

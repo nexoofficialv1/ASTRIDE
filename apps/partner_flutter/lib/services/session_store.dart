@@ -1,56 +1,29 @@
 import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/partner_models.dart';
+import '../models/partner_session.dart';
 
 class SessionStore {
-  static const _secure = FlutterSecureStorage();
+  static const _storage = FlutterSecureStorage();
+  static const _key = 'astride_partner_session_v1';
 
-  Future<void> writeSession(PartnerSession session) async {
-    await _secure.write(
-      key: 'partnerSession',
-      value: jsonEncode({
-        'token': session.token,
-        'name': session.name,
-        'role': session.role,
-        'id': session.id,
-        'staffId': session.staffId,
-        'mobile': session.mobile,
-        'mustChangePassword': session.mustChangePassword,
-      }),
-    );
+  Future<void> save(PartnerSession session) =>
+      _storage.write(key: _key, value: jsonEncode(session.toJson()));
+
+  Future<PartnerSession?> read() async {
+    final raw = await _storage.read(key: _key);
+    if (raw == null || raw.trim().isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return null;
+      final session = PartnerSession.fromJson(decoded.cast<String, dynamic>());
+      if (session.token.isEmpty || session.partnerId.isEmpty) return null;
+      return session;
+    } catch (_) {
+      return null;
+    }
   }
 
-  Future<PartnerSession?> readSession() async {
-    final raw = await _secure.read(key: 'partnerSession');
-    if (raw == null) return null;
-
-    final json =
-        (jsonDecode(raw) as Map).cast<String, dynamic>();
-
-    return PartnerSession(
-      token: '${json['token'] ?? ''}',
-      name: '${json['name'] ?? 'Partner'}',
-      role: '${json['role'] ?? 'PROMOTER'}',
-      id: '${json['id'] ?? ''}',
-      staffId: '${json['staffId'] ?? ''}',
-      mobile: '${json['mobile'] ?? ''}',
-      mustChangePassword: json['mustChangePassword'] == true,
-    );
-  }
-
-  Future<void> clear() => _secure.deleteAll();
-
-  Future<String> readLanguage() async =>
-      (await SharedPreferences.getInstance())
-          .getString('partnerLanguage') ??
-      'en';
-
-  Future<void> writeLanguage(String code) async =>
-      (await SharedPreferences.getInstance()).setString(
-        'partnerLanguage',
-        code,
-      );
+  Future<void> clear() => _storage.delete(key: _key);
 }

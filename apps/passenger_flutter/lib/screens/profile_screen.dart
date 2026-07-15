@@ -258,7 +258,7 @@ class ProfileScreen extends StatelessWidget {
                         radius: 46,
                         backgroundColor: Colors.white,
                         backgroundImage:
-                            photo.isEmpty ? null : NetworkImage(photo),
+                            photo.isEmpty ? null : NetworkImage(photo, headers: controller.session?.authHeaders),
                         child: photo.isEmpty
                             ? const Icon(
                                 Icons.person_rounded,

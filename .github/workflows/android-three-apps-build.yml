@@ -1,0 +1,135 @@
+name: ASTRIDE Three APK Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Runtime environment
+        type: choice
+        options: [production, staging]
+        default: production
+        required: true
+      mode:
+        description: Build mode
+        type: choice
+        options: [debug, release]
+        default: debug
+        required: true
+      version:
+        description: Version name
+        default: '3.18.2'
+        required: true
+      build_number:
+        description: Android version code
+        default: '340'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [passenger_flutter, driver_flutter, partner_flutter]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.6'
+          channel: stable
+          cache: true
+      - name: Validate maintained source
+        run: python3 mobile_build/scripts/validate_mobile_source.py
+      - name: Bootstrap native Android project
+        run: bash mobile_build/scripts/bootstrap_mobile.sh "${{ matrix.app }}"
+      - name: Render runtime URLs
+        env:
+          PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL }}
+          PRODUCTION_WS_BASE_URL: ${{ vars.PRODUCTION_WS_BASE_URL }}
+          STAGING_API_BASE_URL: ${{ vars.STAGING_API_BASE_URL }}
+          STAGING_WS_BASE_URL: ${{ vars.STAGING_WS_BASE_URL }}
+        run: bash mobile_build/scripts/render_mobile_env.sh "${{ inputs.environment }}"
+      - name: Inject Passenger/Driver Firebase configuration
+        if: matrix.app != 'partner_flutter'
+        env:
+          FIREBASE_ANDROID_CONFIG_BASE64: ${{ matrix.app == 'passenger_flutter' && secrets.PASSENGER_FIREBASE_ANDROID_BASE64 || secrets.DRIVER_FIREBASE_ANDROID_BASE64 }}
+          FIREBASE_REQUIRED: 'true'
+        run: bash mobile_build/scripts/inject_firebase.sh "${{ matrix.app }}"
+      - name: Validate release inputs
+        if: inputs.mode == 'release'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD || secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          FIREBASE_ANDROID_CONFIG_BASE64: ${{ matrix.app == 'passenger_flutter' && secrets.PASSENGER_FIREBASE_ANDROID_BASE64 || matrix.app == 'driver_flutter' && secrets.DRIVER_FIREBASE_ANDROID_BASE64 || '' }}
+          PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL }}
+          PRODUCTION_WS_BASE_URL: ${{ vars.PRODUCTION_WS_BASE_URL }}
+          STAGING_API_BASE_URL: ${{ vars.STAGING_API_BASE_URL }}
+          STAGING_WS_BASE_URL: ${{ vars.STAGING_WS_BASE_URL }}
+        run: bash mobile_build/scripts/validate_android_release_secrets.sh "${{ matrix.app }}" "${{ inputs.environment }}"
+      - name: Analyze and test
+        working-directory: apps/${{ matrix.app }}
+        run: |
+          flutter analyze
+          flutter test
+      - name: Configure release signing
+        if: inputs.mode == 'release'
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD || secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/astride-upload.jks"
+          cat > "apps/${{ matrix.app }}/android/key.properties" <<PROP
+          storePassword=$STORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=$RUNNER_TEMP/astride-upload.jks
+          PROP
+      - name: Inject optional Google Maps Android key
+        if: inputs.mode == 'release' && matrix.app != 'partner_flutter'
+        env:
+          GOOGLE_MAPS_ANDROID_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_KEY }}
+        run: bash mobile_build/scripts/inject_maps_key.sh "${{ matrix.app }}"
+      - name: Build debug APK
+        if: inputs.mode == 'debug'
+        working-directory: apps/${{ matrix.app }}
+        run: flutter build apk --debug --build-name="${{ inputs.version }}" --build-number="${{ inputs.build_number }}" --dart-define-from-file="../../mobile_build/environments/${{ inputs.environment }}.json"
+      - name: Build signed release APKs and AAB
+        if: inputs.mode == 'release'
+        working-directory: apps/${{ matrix.app }}
+        run: |
+          flutter build apk --release --split-per-abi --build-name="${{ inputs.version }}" --build-number="${{ inputs.build_number }}" --dart-define-from-file="../../mobile_build/environments/${{ inputs.environment }}.json"
+          flutter build appbundle --release --build-name="${{ inputs.version }}" --build-number="${{ inputs.build_number }}" --dart-define-from-file="../../mobile_build/environments/${{ inputs.environment }}.json"
+      - name: Collect and rename artifacts
+        shell: bash
+        run: |
+          mkdir -p out
+          case "${{ matrix.app }}" in
+            passenger_flutter) LABEL=Passenger ;;
+            driver_flutter) LABEL=Driver ;;
+            partner_flutter) LABEL=Partner ;;
+          esac
+          while IFS= read -r file; do
+            base="$(basename "$file")"
+            ext="${base##*.}"
+            abi="${base%.*}"
+            cp "$file" "out/ASTRIDE-${LABEL}-${{ inputs.mode }}-${{ inputs.version }}-b${{ inputs.build_number }}-${abi}.${ext}"
+          done < <(find "apps/${{ matrix.app }}/build/app/outputs" -type f \( -name '*.apk' -o -name '*.aab' \) | sort)
+          cd out
+          sha256sum * > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ASTRIDE-${{ matrix.app }}-${{ inputs.mode }}-${{ inputs.version }}-b${{ inputs.build_number }}
+          path: out/*
+          if-no-files-found: error

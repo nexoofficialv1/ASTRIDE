@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-APP="${1:?usage: package_android_artifacts.sh passenger_flutter|driver_flutter version environment output-dir}"
+APP="${1:?usage: package_android_artifacts.sh passenger_flutter|driver_flutter|partner_flutter version environment output-dir}"
 VERSION="${2:?version required}"
 ENVIRONMENT="${3:?environment required}"
 OUTPUT="${4:?output dir required}"

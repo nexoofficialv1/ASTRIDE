@@ -24,7 +24,7 @@ class AppConfig {
     defaultValue: '',
   );
 
-  static const appVersion = '3.17.0+336';
+  static const appVersion = '3.18.2+340';
 
   static bool get isProduction => environment == 'production';
   static bool get isStaging => environment == 'staging';

@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../state/partner_controller.dart';
-import 'dashboard_screen.dart';
-import 'drivers_screen.dart';
-import 'earnings_screen.dart';
-import 'profile_screen.dart';
+import '../widgets/brand/astride_wordmark.dart';
+import 'partner_dashboard_screen.dart';
+import 'partner_drivers_screen.dart';
+import 'partner_earnings_screen.dart';
+import 'partner_profile_screen.dart';
 
 class PartnerShell extends StatefulWidget {
-  const PartnerShell({super.key, required this.c});
-  final PartnerController c;
+  const PartnerShell({super.key, required this.controller});
+  final PartnerController controller;
 
   @override
   State<PartnerShell> createState() => _PartnerShellState();
@@ -19,72 +20,34 @@ class _PartnerShellState extends State<PartnerShell> {
 
   @override
   Widget build(BuildContext context) {
-    final s = widget.c.strings;
     final pages = [
-      DashboardScreen(c: widget.c),
-      DriversScreen(c: widget.c),
-      EarningsScreen(c: widget.c),
-      ProfileScreen(c: widget.c),
+      PartnerDashboardScreen(controller: widget.controller),
+      PartnerDriversScreen(controller: widget.controller),
+      PartnerEarningsScreen(controller: widget.controller),
+      PartnerProfileScreen(controller: widget.controller),
     ];
-    final titles = [
-      s.t('dashboard'),
-      s.t('drivers'),
-      s.t('earnings'),
-      s.t('profile'),
-    ];
-
+    const titles = ['Dashboard', 'Drivers', 'Earnings', 'Profile'];
     return Scaffold(
       appBar: AppBar(
-        title: Text(titles[index]),
-        actions: [
-          IconButton(
-            onPressed: widget.c.refresh,
-            icon: const Icon(Icons.notifications_none_rounded),
+        title: Row(children: [const AstrideWordmark(compact: true), const Spacer(), Text(titles[index], style: const TextStyle(fontSize: 16))]),
+        actions: [IconButton(onPressed: widget.controller.busy ? null : widget.controller.refreshAll, icon: const Icon(Icons.refresh))],
+      ),
+      body: Column(children: [
+        if (widget.controller.error != null)
+          MaterialBanner(
+            content: Text(widget.controller.error!),
+            actions: [TextButton(onPressed: widget.controller.refreshAll, child: const Text('Retry'))],
           ),
-          const SizedBox(width: 6),
-        ],
-      ),
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 220),
-        child: KeyedSubtree(key: ValueKey(index), child: pages[index]),
-      ),
-      floatingActionButton: widget.c.isPromoter
-          ? FloatingActionButton.extended(
-              onPressed: () => setState(() => index = 1),
-              icon: const Icon(Icons.person_add_alt_1_rounded),
-              label: Text(
-                widget.c.languageCode == 'bn'
-                    ? 'ড্রাইভার যোগ করুন'
-                    : widget.c.languageCode == 'hi'
-                        ? 'ड्राइवर जोड़ें'
-                        : 'Add Driver',
-              ),
-            )
-          : null,
+        Expanded(child: IndexedStack(index: index, children: pages)),
+      ]),
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
-        onDestinationSelected: (v) => setState(() => index = v),
-        destinations: [
-          NavigationDestination(
-            icon: const Icon(Icons.dashboard_outlined),
-            selectedIcon: const Icon(Icons.dashboard_rounded),
-            label: s.t('dashboard'),
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.groups_outlined),
-            selectedIcon: const Icon(Icons.groups_rounded),
-            label: s.t('drivers'),
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.account_balance_wallet_outlined),
-            selectedIcon: const Icon(Icons.account_balance_wallet_rounded),
-            label: s.t('earnings'),
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.more_horiz_rounded),
-            selectedIcon: const Icon(Icons.more_rounded),
-            label: s.t('profile'),
-          ),
+        onDestinationSelected: (value) => setState(() => index = value),
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Home'),
+          NavigationDestination(icon: Icon(Icons.groups_outlined), selectedIcon: Icon(Icons.groups), label: 'Drivers'),
+          NavigationDestination(icon: Icon(Icons.currency_rupee_outlined), selectedIcon: Icon(Icons.currency_rupee), label: 'Earnings'),
+          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Profile'),
         ],
       ),
     );

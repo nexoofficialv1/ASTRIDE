@@ -1,42 +1,41 @@
 name: astride_partner
-description: ASTRIDE Promoter and Area Promoter mobile application
+description: ASTRIDE production partner application for promoters and area promoters
 publish_to: none
-version: 3.16.0+334
+version: 3.18.2+340
 environment:
-  sdk: ">=3.4.0 <4.0.0"
+  sdk: '>=3.4.0 <4.0.0'
 dependencies:
-  image_picker: ^1.1.2
   flutter:
     sdk: flutter
   http: ^1.2.2
   shared_preferences: ^2.3.2
   flutter_secure_storage: ^9.2.2
+  connectivity_plus: ^6.0.5
+  url_launcher: ^6.3.1
+  image_picker: ^1.1.2
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^4.0.0
-  flutter_launcher_icons: ^0.14.1
-  flutter_native_splash: ^2.4.3
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.3
+  flutter_native_splash: ^2.4.4
 flutter:
   uses-material-design: true
   assets:
     - assets/locales/
     - assets/brand/
-
-
 flutter_launcher_icons:
   android: true
   ios: true
   image_path: assets/brand/app_icon.png
-  adaptive_icon_background: "#0D1B3D"
+  adaptive_icon_background: '#0D1B3D'
   adaptive_icon_foreground: assets/brand/app_icon.png
   remove_alpha_ios: true
-
 flutter_native_splash:
-  color: "#0D1B3D"
+  color: '#0D1B3D'
   image: assets/brand/splash_logo.png
   android_12:
-    color: "#0D1B3D"
+    color: '#0D1B3D'
     image: assets/brand/app_icon.png
   ios: true
   android: true

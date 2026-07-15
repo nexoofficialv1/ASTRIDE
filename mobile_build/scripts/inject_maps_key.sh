@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-APP="${1:?usage: inject_maps_key.sh passenger_flutter|driver_flutter}"
+APP="${1:?usage: inject_maps_key.sh passenger_flutter|driver_flutter|partner_flutter}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 FILE="$ROOT/apps/$APP/android/app/src/main/res/values/astride_keys.xml"
 [[ -f "$FILE" ]] || { echo "Map key resource not found. Bootstrap first." >&2; exit 2; }

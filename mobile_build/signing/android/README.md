@@ -1,8 +1,8 @@
-# ASTRIDE Android signing and GitHub release setup
+# ASTRIDE Android signing and GitHub build setup
 
-Never commit `.jks`, `key.properties`, Firebase JSON, API keys, passwords, or base64 secrets.
+Debug APK build করতে signing secret লাগে না। Final release APK/AAB-এর জন্য একই upload keystore তিনটি app-এ ব্যবহার করা যাবে।
 
-## 1. Create the upload keystore once
+## Create the upload keystore once
 
 ```bash
 keytool -genkeypair -v \
@@ -11,46 +11,36 @@ keytool -genkeypair -v \
   -keyalg RSA -keysize 2048 -validity 10000
 ```
 
-Keep the original keystore and passwords in two secure backups. Losing it may prevent future app updates.
+Keystore এবং password-এর অন্তত দুইটি secure backup রাখুন।
 
-## 2. Convert files to GitHub secrets
-
-Linux/Termux:
-
-```bash
-base64 -w 0 astride-upload.jks > keystore.base64
-base64 -w 0 google-services.json > firebase.base64
-```
-
-If `base64 -w` is unavailable:
-
-```bash
-base64 astride-upload.jks | tr -d '\n' > keystore.base64
-```
-
-## 3. Repository secrets
-
-Create these under **Settings → Secrets and variables → Actions → Secrets**:
+## GitHub release secrets
 
 - `ANDROID_KEYSTORE_BASE64`
 - `ANDROID_STORE_PASSWORD`
 - `ANDROID_KEY_PASSWORD`
 - `ANDROID_KEY_ALIAS`
-- `GOOGLE_MAPS_ANDROID_KEY`
-- `PASSENGER_FIREBASE_ANDROID_BASE64`
-- `DRIVER_FIREBASE_ANDROID_BASE64`
+- `GOOGLE_MAPS_ANDROID_KEY` — Google provider চালালে প্রয়োজন; OSM/Mappls fallback build-এ blank থাকতে পারে
+- `PASSENGER_FIREBASE_ANDROID_BASE64` — optional override; package-এ private config bundled আছে
+- `DRIVER_FIREBASE_ANDROID_BASE64` — optional override; package-এ private config bundled আছে
 
-## 4. Repository variables
+Partner app বর্তমানে Firebase ছাড়া build হয়। Partner push notification পরে যোগ করতে Firebase-এ `com.nexo.astride.partner` client তৈরি করতে হবে।
 
-Create these under **Actions → Variables**:
+## Repository variables
 
-- `PRODUCTION_API_BASE_URL` — for example `https://api.yourdomain.in`
-- `PRODUCTION_WS_BASE_URL` — for example `wss://api.yourdomain.in`
+- `PRODUCTION_API_BASE_URL=https://astaride.nexoofficial.in`
+- `PRODUCTION_WS_BASE_URL=wss://astaride.nexoofficial.in`
 - `STAGING_API_BASE_URL`
 - `STAGING_WS_BASE_URL`
 
-Production validation rejects HTTP, WS, localhost, and `.example` hosts.
+## Build
 
-## 5. Build
+GitHub → **Actions → ASTRIDE Three APK Build → Run workflow**।
 
-Open **Actions → ASTRIDE Android Signed Release → Run workflow**. Select Passenger or Driver, environment, semantic version, and an always-increasing Android build number. The workflow creates signed AAB/APKs, SHA-256 checksums, and a release manifest. GitHub Release publication is optional.
+Testing-এর জন্য প্রথমে:
+
+- environment: `production`
+- mode: `debug`
+- version: `3.18.2`
+- build number: `340`
+
+একবার workflow চালালে Passenger, Driver এবং Partner—তিনটি পৃথক artifact তৈরি হবে।

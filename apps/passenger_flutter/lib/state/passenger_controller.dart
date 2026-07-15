@@ -40,38 +40,65 @@ class PassengerController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final code = await store.language();
+      final code = await store.language().timeout(
+        const Duration(seconds: 5),
+      );
       if (code != null) {
-        locale = await AppLocale.load(code);
+        locale = await AppLocale.load(code).timeout(
+          const Duration(seconds: 5),
+        );
       }
 
-      session = await store.read();
-      profileName = (await store.profileName()) ?? '';
+      session = await store.read().timeout(
+        const Duration(seconds: 8),
+      );
+      profileName = (await store.profileName().timeout(
+        const Duration(seconds: 5),
+      )) ?? '';
       api.token = session?.token;
 
+      // Server configuration and Firebase registration are background startup
+      // tasks. They must not keep the splash screen visible indefinitely.
+      unawaited(_refreshRuntimeConfig());
+
+      if (session != null) {
+        await refreshProfile().timeout(const Duration(seconds: 25));
+        await restoreActiveBooking().timeout(const Duration(seconds: 25));
+        unawaited(_initializePushSafely());
+
+        if ('${profile['fullName'] ?? ''}'.trim().isEmpty &&
+            profileName.trim().isNotEmpty) {
+          unawaited(updateProfileName(profileName));
+        }
+      }
+    } catch (e) {
+      error = e.toString();
+    } finally {
+      loading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _refreshRuntimeConfig() async {
+    try {
       final response = await api.getJson(
         '/v1/public/mobile-config?app=passenger&version=${AppConfig.appVersion}',
       );
       config = RuntimeConfig.fromJson(
         (response['config'] ?? response).cast<String, dynamic>(),
       );
-
-      if (session != null) {
-        await refreshProfile();
-        await restoreActiveBooking();
-        await _initializePush();
-
-        if ('${profile['fullName'] ?? ''}'.trim().isEmpty &&
-            profileName.trim().isNotEmpty) {
-          await updateProfileName(profileName);
-        }
-      }
-    } catch (e) {
-      error = e.toString();
+      notifyListeners();
+    } catch (_) {
+      // Keep the built-in fallback configuration and continue startup.
     }
+  }
 
-    loading = false;
-    notifyListeners();
+  Future<void> _initializePushSafely() async {
+    try {
+      await _initializePush().timeout(const Duration(seconds: 15));
+    } catch (_) {
+      _pushInitialized = false;
+    }
   }
 
   Future<void> selectLanguage(String code) async {

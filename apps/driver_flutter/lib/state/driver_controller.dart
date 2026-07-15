@@ -53,16 +53,48 @@ class DriverController extends ChangeNotifier {
 
   Future<void> bootstrap() async {
     loading = true;
+    error = null;
     notifyListeners();
 
-    final code = await store.language();
-    if (code != null) {
-      locale = await AppLocale.load(code);
+    try {
+      final code = await store.language().timeout(
+        const Duration(seconds: 5),
+      );
+      if (code != null) {
+        locale = await AppLocale.load(code).timeout(
+          const Duration(seconds: 5),
+        );
+      }
+
+      session = await store.read().timeout(
+        const Duration(seconds: 8),
+      );
+      api.token = session?.token;
+
+      // Runtime configuration and push registration must never hold the
+      // startup screen. Fallback configuration keeps login usable offline.
+      unawaited(_refreshRuntimeConfig());
+
+      if (session != null) {
+        await _migrateLinkedIdentity().timeout(
+          const Duration(seconds: 20),
+        );
+        if (!mustChangePassword) {
+          await refreshDriver().timeout(
+            const Duration(seconds: 25),
+          );
+          unawaited(_initializePushSafely());
+        }
+      }
+    } catch (e) {
+      error = e.toString();
+    } finally {
+      loading = false;
+      notifyListeners();
     }
+  }
 
-    session = await store.read();
-    api.token = session?.token;
-
+  Future<void> _refreshRuntimeConfig() async {
     try {
       final response = await api.getJson(
         '/v1/public/mobile-config?app=driver&version=${AppConfig.appVersion}',
@@ -70,24 +102,18 @@ class DriverController extends ChangeNotifier {
       config = RuntimeConfig.fromJson(
         (response['config'] ?? response).cast<String, dynamic>(),
       );
+      notifyListeners();
     } catch (_) {
-      // Runtime config failure must not delete a valid encrypted session.
+      // Keep the built-in fallback configuration and continue startup.
     }
+  }
 
-    if (session != null) {
-      try {
-        await _migrateLinkedIdentity();
-        if (!mustChangePassword) {
-          await refreshDriver();
-          await _initializePush();
-        }
-      } catch (e) {
-        error = e.toString();
-      }
+  Future<void> _initializePushSafely() async {
+    try {
+      await _initializePush().timeout(const Duration(seconds: 15));
+    } catch (_) {
+      _pushInitialized = false;
     }
-
-    loading = false;
-    notifyListeners();
   }
 
   Future<void> _migrateLinkedIdentity() async {
