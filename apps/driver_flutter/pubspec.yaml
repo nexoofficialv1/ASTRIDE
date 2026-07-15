@@ -1,7 +1,7 @@
 name: astride_driver
 description: ASTRIDE production driver mobile application
 publish_to: none
-version: 3.18.2+342
+version: 3.18.2+343
 environment:
   sdk: '>=3.4.0 <4.0.0'
 dependencies:

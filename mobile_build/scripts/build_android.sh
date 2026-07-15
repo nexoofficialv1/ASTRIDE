@@ -11,7 +11,7 @@ if [[ ! -f "$ROOT/apps/$APP/android/app/build.gradle" && ! -f "$ROOT/apps/$APP/a
 fi
 if [[ "$MODE" == release ]]; then bash "$ROOT/mobile_build/scripts/validate_android_release_secrets.sh" "$APP" "$ENVIRONMENT"; fi
 if [[ "$APP" != partner_flutter ]]; then
-  FIREBASE_REQUIRED="$([[ "$MODE" == release ]] && echo true || echo false)" bash "$ROOT/mobile_build/scripts/inject_firebase.sh" "$APP"
+  FIREBASE_REQUIRED=true bash "$ROOT/mobile_build/scripts/inject_firebase.sh" "$APP"
   bash "$ROOT/mobile_build/scripts/inject_maps_key.sh" "$APP"
 fi
 cd "$ROOT/apps/$APP"

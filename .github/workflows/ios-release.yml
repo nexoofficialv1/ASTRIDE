@@ -1,4 +1,5 @@
 name: iOS Release
+
 on:
   workflow_dispatch:
     inputs:
@@ -6,16 +7,23 @@ on:
         type: choice
         options: [passenger_flutter, driver_flutter]
         required: true
+
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: macos-15
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.41.6'
           channel: stable
           cache: true
-      - run: bash mobile_build/scripts/bootstrap_mobile.sh
+      - name: Bootstrap selected mobile app
+        run: bash mobile_build/scripts/bootstrap_mobile.sh "${{ inputs.app }}"
       - name: Install Apple certificate
         env:
           CERTIFICATE_P12: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
@@ -33,7 +41,8 @@ jobs:
         run: |
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           echo "$PROFILE_B64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/astride.mobileprovision
-      - run: bash mobile_build/scripts/build_ios.sh ${{ inputs.app }}
+      - name: Build iOS release
+        run: bash mobile_build/scripts/build_ios.sh "${{ inputs.app }}"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.app }}-ios-release

@@ -1,4 +1,5 @@
 name: Android Test APK
+
 on:
   workflow_dispatch:
     inputs:
@@ -13,30 +14,36 @@ on:
         options: [staging, production]
         default: staging
         required: true
+
+permissions:
+  contents: read
+
 jobs:
   build-test-apk:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.41.6'
           channel: stable
           cache: true
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Validate repository
-        run: node tests/mobile-v24-github-ready.mjs
       - name: Build test APK
         env:
           FIREBASE_ANDROID_CONFIG_BASE64: ${{ inputs.app == 'passenger_flutter' && secrets.PASSENGER_FIREBASE_ANDROID_BASE64 || (inputs.app == 'driver_flutter' && secrets.DRIVER_FIREBASE_ANDROID_BASE64 || secrets.PARTNER_FIREBASE_ANDROID_BASE64) }}
-          FIREBASE_REQUIRED: 'false'
-        run: bash mobile_build/scripts/build_test_apk.sh ${{ inputs.app }} ${{ inputs.environment }}
+          FIREBASE_REQUIRED: ${{ inputs.app != 'partner_flutter' && 'true' || 'false' }}
+        run: bash mobile_build/scripts/build_test_apk.sh "${{ inputs.app }}" "${{ inputs.environment }}"
       - uses: actions/upload-artifact@v4
         with:
-          name: astride-${{ inputs.app }}-${{ inputs.environment }}-test-apk
+          name: astride-${{ inputs.app }}-${{ inputs.environment }}-test-apk-b343
           path: apps/${{ inputs.app }}/build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
           retention-days: 14

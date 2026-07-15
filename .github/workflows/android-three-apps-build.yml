@@ -21,7 +21,7 @@ on:
         required: true
       build_number:
         description: Android version code
-        default: '342'
+        default: '343'
         required: true
 
 permissions:
@@ -63,6 +63,9 @@ jobs:
           FIREBASE_ANDROID_CONFIG_BASE64: ${{ matrix.app == 'passenger_flutter' && secrets.PASSENGER_FIREBASE_ANDROID_BASE64 || secrets.DRIVER_FIREBASE_ANDROID_BASE64 }}
           FIREBASE_REQUIRED: 'true'
         run: bash mobile_build/scripts/inject_firebase.sh "${{ matrix.app }}"
+      - name: Verify Firebase build input
+        if: matrix.app != 'partner_flutter'
+        run: test -s "apps/${{ matrix.app }}/android/app/google-services.json"
       - name: Validate release inputs
         if: inputs.mode == 'release'
         env:

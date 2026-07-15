@@ -1,0 +1,20 @@
+ASTRIDE Build 343 — Firebase Compile Fix
+
+মূল সমস্যা:
+Android Compile Check workflow native project bootstrap করার পরে Passenger/Driver-এর
+android/app/google-services.json তৈরি বা inject করছিল না। একই সঙ্গে .gitignore সব
+**/google-services.json বাদ দিচ্ছিল, ফলে mobile_build/firebase-এর fallback config-ও
+GitHub repository-তে যায়নি। Google Services Gradle plugin চালু থাকায় compile ধাপে
+processDebugGoogleServices task ব্যর্থ হয়েছে।
+
+সংশোধন:
+1. Passenger ও Driver fallback Firebase client config repository-তে track করার জন্য
+   নির্দিষ্ট .gitignore exception যোগ করা হয়েছে।
+2. android-compile-check.yml-এ bootstrap-এর পর Firebase injection বাধ্যতামূলক করা হয়েছে।
+3. android-three-apps-build.yml, android-passenger-driver-build.yml,
+   android-test-apk.yml ও android-release.yml-এ একই consistent injection flow রাখা হয়েছে।
+4. inject_firebase.sh empty/invalid config reject করবে এবং package name validate করবে।
+5. build_test_apk.sh ও build_android.sh Passenger/Driver-এর জন্য Firebase required রাখবে।
+6. Version/build: 3.18.2+343.
+
+Partner app-এ Firebase এখনও optional।

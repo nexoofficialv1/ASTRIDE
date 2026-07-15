@@ -17,11 +17,11 @@ on:
         required: true
       version:
         description: Version name
-        default: '3.17.0'
+        default: '3.18.2'
         required: true
       build_number:
         description: Android version code
-        default: '336'
+        default: '343'
         required: true
 
 permissions:
@@ -30,7 +30,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -46,13 +46,9 @@ jobs:
           flutter-version: '3.41.6'
           channel: stable
           cache: true
-      - name: Show tool versions
-        run: |
-          flutter --version
-          java -version
       - name: Validate source package
         run: python3 mobile_build/scripts/validate_mobile_source.py
-      - name: Bootstrap native projects and fetch packages
+      - name: Bootstrap native project
         run: bash mobile_build/scripts/bootstrap_mobile.sh "${{ matrix.app }}"
       - name: Render runtime URLs
         env:
@@ -61,11 +57,13 @@ jobs:
           STAGING_API_BASE_URL: ${{ vars.STAGING_API_BASE_URL }}
           STAGING_WS_BASE_URL: ${{ vars.STAGING_WS_BASE_URL }}
         run: bash mobile_build/scripts/render_mobile_env.sh "${{ inputs.environment }}"
-      - name: Inject optional Firebase configuration
+      - name: Inject required Firebase configuration
         env:
           FIREBASE_ANDROID_CONFIG_BASE64: ${{ matrix.app == 'passenger_flutter' && secrets.PASSENGER_FIREBASE_ANDROID_BASE64 || secrets.DRIVER_FIREBASE_ANDROID_BASE64 }}
-          FIREBASE_REQUIRED: 'false'
+          FIREBASE_REQUIRED: 'true'
         run: bash mobile_build/scripts/inject_firebase.sh "${{ matrix.app }}"
+      - name: Verify Firebase build input
+        run: test -s "apps/${{ matrix.app }}/android/app/google-services.json"
       - name: Analyze and test
         working-directory: apps/${{ matrix.app }}
         run: |
@@ -93,20 +91,19 @@ jobs:
         run: flutter build apk --debug --build-name="${{ inputs.version }}" --build-number="${{ inputs.build_number }}" --dart-define-from-file="../../mobile_build/environments/${{ inputs.environment }}.json"
       - name: Build signed release APKs and AAB
         if: inputs.mode == 'release'
-        env:
-          GOOGLE_MAPS_ANDROID_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_KEY }}
+        working-directory: apps/${{ matrix.app }}
         run: |
-          bash mobile_build/scripts/inject_maps_key.sh "${{ matrix.app }}"
-          cd "apps/${{ matrix.app }}"
           flutter build apk --release --split-per-abi --build-name="${{ inputs.version }}" --build-number="${{ inputs.build_number }}" --dart-define-from-file="../../mobile_build/environments/${{ inputs.environment }}.json"
           flutter build appbundle --release --build-name="${{ inputs.version }}" --build-number="${{ inputs.build_number }}" --dart-define-from-file="../../mobile_build/environments/${{ inputs.environment }}.json"
       - name: Collect artifacts
         run: |
           mkdir -p out
-          find "apps/${{ matrix.app }}/build/app/outputs" -type f \( -name '*.apk' -o -name '*.aab' \) -exec cp {} out/ \;
-          cd out && sha256sum * > SHA256SUMS.txt
+          cp apps/${{ matrix.app }}/build/app/outputs/flutter-apk/*.apk out/ 2>/dev/null || true
+          cp apps/${{ matrix.app }}/build/app/outputs/bundle/release/*.aab out/ 2>/dev/null || true
+          cd out
+          sha256sum * > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: ASTRIDE-${{ matrix.app }}-${{ inputs.mode }}-${{ inputs.version }}-${{ inputs.build_number }}
+          name: ASTRIDE-${{ matrix.app }}-${{ inputs.mode }}-${{ inputs.version }}-b${{ inputs.build_number }}
           path: out/*
           if-no-files-found: error
