@@ -43,7 +43,7 @@ jobs:
         run: bash mobile_build/scripts/build_test_apk.sh "${{ inputs.app }}" "${{ inputs.environment }}"
       - uses: actions/upload-artifact@v4
         with:
-          name: astride-${{ inputs.app }}-${{ inputs.environment }}-test-apk-b345
+          name: astride-${{ inputs.app }}-${{ inputs.environment }}-test-apk-b346
           path: apps/${{ inputs.app }}/build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
           retention-days: 14

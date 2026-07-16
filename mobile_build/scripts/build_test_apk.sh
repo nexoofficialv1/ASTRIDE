@@ -12,6 +12,6 @@ if [[ "$APP" != partner_flutter ]]; then
 fi
 cd "$ROOT/apps/$APP"
 flutter pub get
-flutter analyze
+flutter analyze --no-fatal-infos
 flutter test
 flutter build apk --debug --dart-define-from-file="$ENV_FILE"

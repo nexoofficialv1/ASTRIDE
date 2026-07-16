@@ -64,7 +64,7 @@ for app in apps:
             if 'SharedPreferences' in queue_text:
                 errors.append(f'{app}: offline GPS queue must not use SharedPreferences')
     pub_version=str(pub.get('version') or '')
-    if pub_version != '3.20.0+345': errors.append(f'{app}: expected security build version 3.20.0+345, found {pub_version}')
+    if pub_version != '3.20.0+346': errors.append(f'{app}: expected security build version 3.20.0+346, found {pub_version}')
 
     # Flutter 3.41+ deprecation guards. Keep analyzer strict instead of suppressing infos.
     for f in (base/'lib').rglob('*.dart'):

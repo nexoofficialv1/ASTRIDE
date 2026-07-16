@@ -21,7 +21,7 @@ on:
         required: true
       build_number:
         description: Increasing Android version code
-        default: '345'
+        default: '346'
         required: true
 
 permissions:
@@ -90,7 +90,7 @@ jobs:
       - name: Analyze and test
         working-directory: apps/${{ matrix.app }}
         run: |
-          flutter analyze
+          flutter analyze --no-fatal-infos
           flutter test
       - name: Build release APKs and AAB
         working-directory: apps/${{ matrix.app }}

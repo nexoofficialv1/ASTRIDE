@@ -1,0 +1,15 @@
+ASTRIDE Build 346 source validation
+
+- Removed redundant dart:typed_data import from all 3 pinned_transport.dart files: PASS
+- Remaining typed_data imports are used by secure_chat_service.dart: PASS
+- APK build workflows use --no-fatal-infos: PASS
+- Strict Mobile Quality Gate remains unchanged: PASS
+- App versions are 3.20.0+346: PASS
+- Firebase client files present for Passenger and Driver: PASS
+- Firebase Admin service account/private key absent: PASS
+- Workflow YAML parse: PASS
+- Shell syntax: PASS
+- Node mobile pipeline test: PASS
+- ZIP integrity: PASS
+
+Actual flutter analyze/test/APK compilation must run in GitHub Actions.

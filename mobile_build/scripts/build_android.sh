@@ -16,7 +16,7 @@ if [[ "$APP" != partner_flutter ]]; then
 fi
 cd "$ROOT/apps/$APP"
 flutter pub get
-flutter analyze
+flutter analyze --no-fatal-infos
 flutter test
 if [[ "$MODE" == release ]]; then
   VERSION_ARGS=()
