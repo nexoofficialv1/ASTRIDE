@@ -51,6 +51,28 @@ class DriverController extends ChangeNotifier {
   bool get mustChangePassword => session?.mustChangePassword == true;
   String t(String key) => locale?.t(key) ?? key;
 
+  void _bindApiSession() {
+    final current = session;
+    if (current == null) {
+      api.clearSession();
+      return;
+    }
+    api.configureSession(
+      accessToken: current.token,
+      rotatingRefreshToken: current.refreshToken,
+      endpoint: '/v1/staff-auth/refresh',
+      onChanged: (accessToken, refreshToken) async {
+        final active = session;
+        if (active == null) return;
+        session = active.copyWith(
+          token: accessToken,
+          refreshToken: refreshToken,
+        );
+        await store.save(session!);
+      },
+    );
+  }
+
   Future<void> bootstrap() async {
     loading = true;
     error = null;
@@ -69,7 +91,7 @@ class DriverController extends ChangeNotifier {
       session = await store.read().timeout(
         const Duration(seconds: 8),
       );
-      api.token = session?.token;
+      _bindApiSession();
 
       // Runtime configuration and push registration must never hold the
       // startup screen. Fallback configuration keeps login usable offline.
@@ -170,7 +192,9 @@ class DriverController extends ChangeNotifier {
           (response['accessToken'] ?? response['token']).toString();
       final driverId = '${staff['linkedEntityId'] ?? ''}';
 
-      if (token.isEmpty || token == 'null') {
+      final refreshToken = (response['refreshToken'] ?? '').toString();
+
+      if (token.isEmpty || token == 'null' || refreshToken.isEmpty) {
         throw ApiException('Login token was not returned.');
       }
       if (driverId.isEmpty) {
@@ -181,6 +205,7 @@ class DriverController extends ChangeNotifier {
         userId: driverId,
         staffId: '${staff['id'] ?? ''}',
         token: token,
+        refreshToken: refreshToken,
         mobile: '${staff['mobile'] ?? identity}',
         role: '${staff['role'] ?? 'DRIVER'}',
         mustChangePassword:
@@ -188,7 +213,7 @@ class DriverController extends ChangeNotifier {
             staff['mustChangePassword'] == true,
       );
 
-      api.token = token;
+      _bindApiSession();
       await store.save(session!);
 
       if (!mustChangePassword) {
@@ -855,7 +880,7 @@ class DriverController extends ChangeNotifier {
     _pushOpenedSubscription = null;
     _pushInitialized = false;
     await store.clear();
-    api.token = null;
+    api.clearSession();
     session = null;
     profile = {};
     documents = [];

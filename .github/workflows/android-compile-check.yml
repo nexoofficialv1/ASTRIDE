@@ -54,10 +54,10 @@ jobs:
         run: node tests/mobile-v23-build-pipeline.mjs
       - name: Compile debug APK
         working-directory: apps/${{ matrix.app }}
-        run: flutter build apk --debug --build-name=3.18.2 --build-number=343 --dart-define-from-file=../../mobile_build/environments/staging.json
+        run: flutter build apk --debug --build-name=3.20.0 --build-number=345 --dart-define-from-file=../../mobile_build/environments/staging.json
       - uses: actions/upload-artifact@v4
         with:
-          name: astride-${{ matrix.app }}-compile-check-b343
+          name: astride-${{ matrix.app }}-compile-check-b345
           path: apps/${{ matrix.app }}/build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
           retention-days: 7

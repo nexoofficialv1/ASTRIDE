@@ -18,7 +18,7 @@ class SessionStore {
       final decoded = jsonDecode(raw);
       if (decoded is! Map) return null;
       final session = PartnerSession.fromJson(decoded.cast<String, dynamic>());
-      if (session.token.isEmpty || session.partnerId.isEmpty) return null;
+      if (session.token.isEmpty || session.refreshToken.isEmpty || session.partnerId.isEmpty) return null;
       return session;
     } catch (_) {
       return null;

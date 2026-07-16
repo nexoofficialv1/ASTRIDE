@@ -5,6 +5,7 @@ import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../core/app_config.dart';
+import 'pinned_transport.dart';
 
 class LiveService {
   WebSocketChannel? _channel;
@@ -41,6 +42,7 @@ class LiveService {
         },
         pingInterval: const Duration(seconds: 20),
         connectTimeout: const Duration(seconds: 15),
+        customClient: PinnedTransport.newHttpClient(),
       );
       _channel!.stream.listen(
         (message) {

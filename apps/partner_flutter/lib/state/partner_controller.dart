@@ -23,10 +23,32 @@ class PartnerController extends ChangeNotifier {
   bool get isAuthenticated => session != null;
   bool get isPromoter => (partner['role'] ?? session?.role) == 'PROMOTER';
 
+  void _bindApiSession() {
+    final current = session;
+    if (current == null) {
+      api.clearSession();
+      return;
+    }
+    api.configureSession(
+      accessToken: current.token,
+      rotatingRefreshToken: current.refreshToken,
+      endpoint: '/v1/partner/auth/refresh',
+      onChanged: (accessToken, refreshToken) async {
+        final active = session;
+        if (active == null) return;
+        session = active.copyWith(
+          token: accessToken,
+          refreshToken: refreshToken,
+        );
+        await store.save(session!);
+      },
+    );
+  }
+
   Future<void> bootstrap() async {
     session = await store.read();
     if (session != null) {
-      api.token = session!.token;
+      _bindApiSession();
       try {
         await refreshAll();
       } on ApiException catch (e) {
@@ -49,17 +71,19 @@ class PartnerController extends ChangeNotifier {
       });
       final actor = _map(data['partner']);
       final token = (data['accessToken'] ?? data['token'] ?? '').toString();
-      if (token.isEmpty || actor.isEmpty) {
+      final refreshToken = (data['refreshToken'] ?? '').toString();
+      if (token.isEmpty || refreshToken.isEmpty || actor.isEmpty) {
         throw ApiException('Login response incomplete.');
       }
       session = PartnerSession(
         partnerId: (actor['id'] ?? '').toString(),
         token: token,
+        refreshToken: refreshToken,
         mobile: (actor['mobile'] ?? normalized).toString(),
         role: (actor['role'] ?? 'PROMOTER').toString(),
         name: (actor['name'] ?? 'Partner').toString(),
       );
-      api.token = token;
+      _bindApiSession();
       partner = actor;
       await store.save(session!);
       await refreshAll(notify: false);
@@ -160,7 +184,7 @@ class PartnerController extends ChangeNotifier {
     drivers = [];
     earnings = {};
     withdrawals = [];
-    api.token = null;
+    api.clearSession();
     await store.clear();
   }
 

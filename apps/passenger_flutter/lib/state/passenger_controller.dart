@@ -34,6 +34,28 @@ class PassengerController extends ChangeNotifier {
   StreamSubscription<RemoteMessage>? _pushOpenedSubscription;
   bool _pushInitialized = false;
 
+  void _bindApiSession() {
+    final current = session;
+    if (current == null) {
+      api.clearSession();
+      return;
+    }
+    api.configureSession(
+      accessToken: current.token,
+      rotatingRefreshToken: current.refreshToken,
+      endpoint: '/v1/auth/refresh',
+      onChanged: (accessToken, refreshToken) async {
+        final active = session;
+        if (active == null) return;
+        session = active.copyWith(
+          token: accessToken,
+          refreshToken: refreshToken,
+        );
+        await store.save(session!);
+      },
+    );
+  }
+
   Future<void> bootstrap() async {
     loading = true;
     error = null;
@@ -55,7 +77,7 @@ class PassengerController extends ChangeNotifier {
       profileName = (await store.profileName().timeout(
         const Duration(seconds: 5),
       )) ?? '';
-      api.token = session?.token;
+      _bindApiSession();
 
       // Server configuration and Firebase registration are background startup
       // tasks. They must not keep the splash screen visible indefinitely.
@@ -143,7 +165,9 @@ class PassengerController extends ChangeNotifier {
             response['jwt'])
         ?.toString();
 
-    if (token == null || token.isEmpty) {
+    final refreshToken = (response['refreshToken'] ?? '').toString();
+
+    if (token == null || token.isEmpty || refreshToken.isEmpty) {
       throw ApiException('Login token was not returned.');
     }
 
@@ -154,10 +178,11 @@ class PassengerController extends ChangeNotifier {
           response['userId'] ??
           normalizedMobile}',
       token: token,
+      refreshToken: refreshToken,
       mobile: normalizedMobile,
     );
 
-    api.token = token;
+    _bindApiSession();
     await store.save(session!);
     _otpSessionId = null;
     profile = passenger;
@@ -542,7 +567,7 @@ class PassengerController extends ChangeNotifier {
     _pushOpenedSubscription = null;
     _pushInitialized = false;
     await store.clear();
-    api.token = null;
+    api.clearSession();
     session = null;
     profile = {};
     profileName = '';

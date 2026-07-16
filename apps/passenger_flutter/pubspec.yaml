@@ -1,7 +1,7 @@
 name: astride_passenger
 description: ASTRIDE production passenger mobile application
 publish_to: none
-version: 3.18.2+343
+version: 3.20.0+345
 environment:
   sdk: '>=3.4.0 <4.0.0'
 dependencies:
@@ -24,6 +24,8 @@ dependencies:
   permission_handler: ^11.3.1
   firebase_core: ^3.8.1
   firebase_messaging: ^15.1.6
+  firebase_app_check: ^0.3.2+10
+  cryptography: ^2.9.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -35,6 +37,7 @@ flutter:
   assets:
   - assets/locales/
   - assets/brand/
+  - assets/security/
 flutter_launcher_icons:
   android: true
   ios: true

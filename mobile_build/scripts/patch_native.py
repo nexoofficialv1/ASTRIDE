@@ -163,6 +163,8 @@ def patch_manifest(app_dir: Path, app: str) -> None:
             content = content.replace("package `in`.astride.driver", f"package {package_id}")
             (target / native_file.name).write_text(content, encoding="utf-8")
 
+    patch_flag_secure(target / "MainActivity.kt")
+
     if app != "partner_flutter":
         values = app_dir / "android/app/src/main/res/values"
         values.mkdir(parents=True, exist_ok=True)
@@ -174,6 +176,48 @@ def patch_manifest(app_dir: Path, app: str) -> None:
             '</resources>\n',
             encoding="utf-8",
         )
+
+
+def patch_flag_secure(main_activity: Path) -> None:
+    if not main_activity.exists():
+        return
+    content = main_activity.read_text(encoding="utf-8")
+    if "android.os.Bundle" not in content:
+        import_match = re.search(r"^import\s+", content, flags=re.M)
+        imports = "import android.os.Bundle\nimport android.view.WindowManager\n"
+        if import_match:
+            content = content[:import_match.start()] + imports + content[import_match.start():]
+        else:
+            package_match = re.search(r"^package\s+[^\n]+\n", content, flags=re.M)
+            if package_match:
+                content = content[:package_match.end()] + "\n" + imports + content[package_match.end():]
+            else:
+                content = imports + content
+    if "FLAG_SECURE" not in content:
+        bodyless = re.compile(r"class\s+MainActivity\s*:\s*FlutterActivity\(\)\s*$", re.M)
+        secure_class = (
+            "class MainActivity : FlutterActivity() {\n"
+            "    override fun onCreate(savedInstanceState: Bundle?) {\n"
+            "        super.onCreate(savedInstanceState)\n"
+            "        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)\n"
+            "    }\n"
+            "}"
+        )
+        if bodyless.search(content):
+            content = bodyless.sub(secure_class, content, count=1)
+        else:
+            marker = "class MainActivity : FlutterActivity() {"
+            override = (
+                marker
+                + "\n    override fun onCreate(savedInstanceState: Bundle?) {"
+                + "\n        super.onCreate(savedInstanceState)"
+                + "\n        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)"
+                + "\n    }"
+            )
+            if marker not in content:
+                raise RuntimeError(f"Unsupported MainActivity structure: {main_activity}")
+            content = content.replace(marker, override, 1)
+    main_activity.write_text(content, encoding="utf-8")
 
 
 def patch_plist(app_dir: Path, app: str) -> None:

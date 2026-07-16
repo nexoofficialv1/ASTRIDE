@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../design/astride_theme.dart';
 import '../../state/driver_controller.dart';
 import '../../widgets/provider_map.dart';
+import '../secure_chat_screen.dart';
 
 class ActiveRideScreen extends StatefulWidget {
   const ActiveRideScreen({
@@ -313,45 +313,37 @@ class _ActiveRideScreenState extends State<ActiveRideScreen> {
   }
 
   Future<void> _callPassenger() async {
-    await _launchContact(
-      scheme: 'tel',
-      value:
-          '${widget.controller.activeRide?['passengerMobile'] ?? ''}',
-    );
+    final bookingId = '${widget.controller.activeRide?['id'] ?? ''}';
+    if (bookingId.isEmpty) return;
+    try {
+      await widget.controller.api.postJson(
+        '/v1/communications/bookings/$bookingId/call-sessions',
+        {'mode': 'IN_APP_RELAY'},
+      );
+      _toast('Secure call request sent without exposing phone numbers.');
+    } catch (error) {
+      _toast('$error');
+    }
   }
 
   Future<void> _messagePassenger() async {
-    final ride = widget.controller.activeRide ?? {};
-    await _launchContact(
-      scheme: 'sms',
-      value: '${ride['passengerMobile'] ?? ''}',
-      body: 'ASTRIDE Driver here. Ride ${ride['id'] ?? ''}: '
-          'I am contacting you regarding your pickup.',
-    );
-  }
-
-  Future<void> _launchContact({
-    required String scheme,
-    required String value,
-    String? body,
-  }) async {
-    final clean = value.replaceAll(RegExp(r'[^0-9+]'), '');
-    if (clean.isEmpty) {
-      _toast('Passenger contact number is not available.');
+    final bookingId = '${widget.controller.activeRide?['id'] ?? ''}';
+    final actorId = widget.controller.session?.userId ?? '';
+    if (bookingId.isEmpty || actorId.isEmpty) {
+      _toast('Secure chat is not available yet.');
       return;
     }
-    final uri = Uri(
-      scheme: scheme,
-      path: clean,
-      queryParameters:
-          body == null ? null : <String, String>{'body': body},
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SecureChatScreen(
+          api: widget.controller.api,
+          bookingId: bookingId,
+          actorType: 'driver',
+          actorId: actorId,
+          peerLabel: 'Passenger',
+        ),
+      ),
     );
-    if (!await launchUrl(
-      uri,
-      mode: LaunchMode.externalApplication,
-    )) {
-      _toast('Unable to open the phone application.');
-    }
   }
 
   Future<void> _sendSos() async {

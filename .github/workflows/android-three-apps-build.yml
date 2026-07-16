@@ -17,11 +17,11 @@ on:
         required: true
       version:
         description: Version name
-        default: '3.18.2'
+        default: '3.20.0'
         required: true
       build_number:
         description: Android version code
-        default: '343'
+        default: '345'
         required: true
 
 permissions:

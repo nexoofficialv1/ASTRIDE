@@ -1,4 +1,35 @@
-import 'dart:convert';import 'package:shared_preferences/shared_preferences.dart';
-class LocationQueue {static const key='pending_location_points';Future<void> add(Map<String,dynamic> p) async{final s=await SharedPreferences.getInstance();final l=s.getStringList(key)??[];l.add(jsonEncode(p));if(l.length>500)l.removeRange(0,l.length-500);await s.setStringList(key,l);}
- Future<List<Map<String,dynamic>>> read() async{final s=await SharedPreferences.getInstance();return (s.getStringList(key)??[]).map((e)=>(jsonDecode(e) as Map).cast<String,dynamic>()).toList();}
- Future<void> clear() async=>(await SharedPreferences.getInstance()).remove(key);}
+import 'dart:convert';
+
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+class LocationQueue {
+  static const _key = 'astride_pending_location_points_v2';
+  static const _storage = FlutterSecureStorage();
+
+  Future<void> add(Map<String, dynamic> point) async {
+    final items = await read();
+    items.add(Map<String, dynamic>.from(point));
+    if (items.length > 500) {
+      items.removeRange(0, items.length - 500);
+    }
+    await _storage.write(key: _key, value: jsonEncode(items));
+  }
+
+  Future<List<Map<String, dynamic>>> read() async {
+    final raw = await _storage.read(key: _key);
+    if (raw == null || raw.trim().isEmpty) return <Map<String, dynamic>>[];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return <Map<String, dynamic>>[];
+      return decoded
+          .whereType<Map>()
+          .map((item) => item.cast<String, dynamic>())
+          .toList();
+    } catch (_) {
+      await clear();
+      return <Map<String, dynamic>>[];
+    }
+  }
+
+  Future<void> clear() => _storage.delete(key: _key);
+}

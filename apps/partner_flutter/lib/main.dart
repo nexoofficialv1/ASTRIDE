@@ -4,12 +4,14 @@ import 'core/app_config.dart';
 import 'design/astride_theme.dart';
 import 'screens/partner_root.dart';
 import 'services/api_client.dart';
+import 'services/pinned_transport.dart';
 import 'services/session_store.dart';
 import 'state/partner_controller.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   AppConfig.validate();
+  await PinnedTransport.initialize();
   final controller = PartnerController(ApiClient(), SessionStore())..bootstrap();
   runApp(PartnerApp(controller: controller));
 }

@@ -40,7 +40,7 @@ Testing-এর জন্য প্রথমে:
 
 - environment: `production`
 - mode: `debug`
-- version: `3.18.2`
+- version: `3.20.0`
 - build number: `340`
 
 একবার workflow চালালে Passenger, Driver এবং Partner—তিনটি পৃথক artifact তৈরি হবে।

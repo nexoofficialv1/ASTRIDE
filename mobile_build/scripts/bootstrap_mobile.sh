@@ -52,6 +52,7 @@ cp -a "$TMP_DIR/generated/ios" "$APP_DIR/ios"
 # manifest/plist would remove Flutter's MainActivity and mandatory bundle keys.
 python3 "$ROOT/mobile_build/scripts/patch_native.py" "$ROOT" "$APP"
 python3 "$ROOT/mobile_build/scripts/patch_android_signing.py" "$APP_DIR"
+bash "$ROOT/mobile_build/scripts/fetch_api_certificate.sh" "$APP"
 
 cd "$APP_DIR"
 flutter pub get
