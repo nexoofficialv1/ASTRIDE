@@ -1,0 +1,7 @@
+import 'package:flutter/material.dart';
+import '../design/astride_theme.dart';
+import '../widgets/brand/astride_wordmark.dart';
+class LanguageScreen extends StatelessWidget {
+ const LanguageScreen({super.key,required this.onSelect}); final Future<void> Function(String) onSelect;
+ @override Widget build(BuildContext context)=>Scaffold(body:SafeArea(child:Padding(padding:const EdgeInsets.all(24),child:Column(children:[const SizedBox(height:34),const AstrideWordmark(),const Spacer(),const Icon(Icons.translate_rounded,size:82,color:AstrideColors.green),const SizedBox(height:22),const Text('Choose your language',style:TextStyle(fontSize:25,fontWeight:FontWeight.w800,color:AstrideColors.navy)),const SizedBox(height:8),const Text('আপনার ভাষা নির্বাচন করুন',style:TextStyle(fontSize:20,fontWeight:FontWeight.w700)),const SizedBox(height:6),const Text('अपनी भाषा चुनें',style:TextStyle(fontSize:20,fontWeight:FontWeight.w700)),const SizedBox(height:30),for(final e in const {'en':'English','bn':'বাংলা','hi':'हिंदी'}.entries)Padding(padding:const EdgeInsets.only(bottom:12),child:SizedBox(width:double.infinity,child:FilledButton.tonal(onPressed:()=>onSelect(e.key),child:Padding(padding:const EdgeInsets.all(15),child:Text(e.value,style:const TextStyle(fontSize:18,fontWeight:FontWeight.w700)))))),const Spacer(),const Text('ASTRIDE by Astra Technologies',style:TextStyle(color:AstrideColors.muted))]))));
+}

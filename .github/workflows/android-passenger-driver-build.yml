@@ -1,0 +1,109 @@
+name: ASTRIDE Passenger and Driver APK Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Runtime environment
+        type: choice
+        options: [production, staging]
+        default: production
+        required: true
+      mode:
+        description: Build mode
+        type: choice
+        options: [debug, release]
+        default: debug
+        required: true
+      version:
+        description: Version name
+        default: '3.20.0'
+        required: true
+      build_number:
+        description: Android version code
+        default: '346'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [passenger_flutter, driver_flutter]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.6'
+          channel: stable
+          cache: true
+      - name: Validate source package
+        run: python3 mobile_build/scripts/validate_mobile_source.py
+      - name: Bootstrap native project
+        run: bash mobile_build/scripts/bootstrap_mobile.sh "${{ matrix.app }}"
+      - name: Render runtime URLs
+        env:
+          PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL }}
+          PRODUCTION_WS_BASE_URL: ${{ vars.PRODUCTION_WS_BASE_URL }}
+          STAGING_API_BASE_URL: ${{ vars.STAGING_API_BASE_URL }}
+          STAGING_WS_BASE_URL: ${{ vars.STAGING_WS_BASE_URL }}
+        run: bash mobile_build/scripts/render_mobile_env.sh "${{ inputs.environment }}"
+      - name: Inject required Firebase configuration
+        env:
+          FIREBASE_ANDROID_CONFIG_BASE64: ${{ matrix.app == 'passenger_flutter' && secrets.PASSENGER_FIREBASE_ANDROID_BASE64 || secrets.DRIVER_FIREBASE_ANDROID_BASE64 }}
+          FIREBASE_REQUIRED: 'true'
+        run: bash mobile_build/scripts/inject_firebase.sh "${{ matrix.app }}"
+      - name: Verify Firebase build input
+        run: test -s "apps/${{ matrix.app }}/android/app/google-services.json"
+      - name: Analyze and test
+        working-directory: apps/${{ matrix.app }}
+        run: |
+          flutter analyze --no-fatal-infos
+          flutter test
+      - name: Configure signing for release
+        if: inputs.mode == 'release'
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD || secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          test -n "$KEYSTORE_B64"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/astride-upload.jks"
+          cat > "apps/${{ matrix.app }}/android/key.properties" <<PROP
+          storePassword=$STORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=$RUNNER_TEMP/astride-upload.jks
+          PROP
+      - name: Build debug APK
+        if: inputs.mode == 'debug'
+        working-directory: apps/${{ matrix.app }}
+        run: flutter build apk --debug --build-name="${{ inputs.version }}" --build-number="${{ inputs.build_number }}" --dart-define-from-file="../../mobile_build/environments/${{ inputs.environment }}.json"
+      - name: Build signed release APKs and AAB
+        if: inputs.mode == 'release'
+        working-directory: apps/${{ matrix.app }}
+        run: |
+          flutter build apk --release --split-per-abi --build-name="${{ inputs.version }}" --build-number="${{ inputs.build_number }}" --dart-define-from-file="../../mobile_build/environments/${{ inputs.environment }}.json"
+          flutter build appbundle --release --build-name="${{ inputs.version }}" --build-number="${{ inputs.build_number }}" --dart-define-from-file="../../mobile_build/environments/${{ inputs.environment }}.json"
+      - name: Collect artifacts
+        run: |
+          mkdir -p out
+          cp apps/${{ matrix.app }}/build/app/outputs/flutter-apk/*.apk out/ 2>/dev/null || true
+          cp apps/${{ matrix.app }}/build/app/outputs/bundle/release/*.aab out/ 2>/dev/null || true
+          cd out
+          sha256sum * > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ASTRIDE-${{ matrix.app }}-${{ inputs.mode }}-${{ inputs.version }}-b${{ inputs.build_number }}
+          path: out/*
+          if-no-files-found: error

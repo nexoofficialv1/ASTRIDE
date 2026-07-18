@@ -1,0 +1,7 @@
+{
+  "APP_ENV": "staging",
+  "API_BASE_URL": "https://staging-api.astride.example",
+  "WS_BASE_URL": "wss://staging-api.astride.example",
+  "ENABLE_DEBUG_LOGS": "true",
+  "ALLOW_INSECURE_HTTP": "false"
+}

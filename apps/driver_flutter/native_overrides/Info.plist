@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>NSLocationWhenInUseUsageDescription</key><string>Your location is used to receive nearby ride requests.</string>
+<key>NSLocationAlwaysAndWhenInUseUsageDescription</key><string>Background location is required only while online or during an active ride.</string>
+<key>UIBackgroundModes</key><array><string>location</string><string>fetch</string><string>remote-notification</string></array>
+<key>NSUserNotificationUsageDescription</key><string>Notifications provide ride requests and safety updates.</string>
+	<key>FirebaseAppDelegateProxyEnabled</key>
+	<true/>
+</dict></plist>

@@ -1,0 +1,56 @@
+name: astride_passenger
+description: ASTRIDE production passenger mobile application
+publish_to: none
+version: 3.23.0+348
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+dependencies:
+  url_launcher: ^6.3.1
+  razorpay_flutter: ^1.4.0
+  latlong2: ^0.9.1
+  flutter_map: ^7.0.2
+  share_plus: ^10.1.2
+  path_provider: ^2.1.5
+  image_picker: ^1.1.2
+  mobile_scanner: ^7.3.0
+  flutter:
+    sdk: flutter
+  http: ^1.2.2
+  shared_preferences: ^2.3.2
+  flutter_secure_storage: ^9.2.2
+  connectivity_plus: ^6.0.5
+  web_socket_channel: ^3.0.1
+  geolocator: ^13.0.1
+  google_maps_flutter: ^2.9.0
+  permission_handler: ^11.3.1
+  firebase_core: ^3.8.1
+  firebase_messaging: ^15.1.6
+  firebase_app_check: ^0.3.2+10
+  cryptography: ^2.9.0
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.3
+  flutter_native_splash: ^2.4.4
+flutter:
+  uses-material-design: true
+  assets:
+  - assets/locales/
+  - assets/brand/
+  - assets/security/
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/brand/app_icon.png
+  adaptive_icon_background: '#0D1B3D'
+  adaptive_icon_foreground: assets/brand/app_icon.png
+  remove_alpha_ios: true
+flutter_native_splash:
+  color: '#0D1B3D'
+  image: assets/brand/splash_logo.png
+  android_12:
+    color: '#0D1B3D'
+    image: assets/brand/app_icon.png
+  ios: true
+  android: true

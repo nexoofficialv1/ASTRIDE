@@ -1,0 +1,21 @@
+.dart_tool/
+.packages
+.pub-cache/
+build/
+android/.gradle/
+android/local.properties
+android/key.properties
+**/google-services.json
+**/GoogleService-Info.plist
+*.jks
+*.keystore
+.env
+
+# Firebase Android client configuration is required by CI after native
+# scaffolding is regenerated. These two files contain non-secret app/project
+# identifiers and are intentionally tracked as a build fallback.
+!mobile_build/firebase/
+!mobile_build/firebase/passenger_flutter/
+!mobile_build/firebase/driver_flutter/
+!mobile_build/firebase/passenger_flutter/google-services.json
+!mobile_build/firebase/driver_flutter/google-services.json

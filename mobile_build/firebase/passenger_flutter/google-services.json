@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "10467637693",
+    "project_id": "astride-36cc0",
+    "storage_bucket": "astride-36cc0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:10467637693:android:78aca040fcdf3af54f7ad4",
+        "android_client_info": {
+          "package_name": "com.nexo.astride.driver"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDtqjfRW-TazdW2b1XzsMVm5azOJ9Twk-8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:10467637693:android:67c27df651099bdb4f7ad4",
+        "android_client_info": {
+          "package_name": "com.nexo.astride.passenger"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDtqjfRW-TazdW2b1XzsMVm5azOJ9Twk-8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
